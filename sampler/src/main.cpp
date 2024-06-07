@@ -7,7 +7,11 @@
 #include <ADC_util.h>
 #include <Arduino.h>
 #include <Array.h>
+#include <math.h>
 #include <cstdint>
+#if defined(USB_MIDI)
+  #include <MIDIUSB.h>
+#endif
 
 #define unlikely() ()
 
@@ -15,17 +19,34 @@ void print_value(int value) {
   Serial.print(value);
   //int min = 200;
   //int max = 500;
-  value = value > 600 ? 600 : value;
-  value = value - 200;
+  int lower = 210;
+  int upper = 350;
+
+  value = value > upper ? upper : value;
+  value = value - lower;
+  
+  int res = 1;
+
+  Serial.print("\xE2\x96\x88");
   
   for(int i = 0; i < value; i++) {
-    if (i % 1 == 0) {
+    if (i % res == 0) {
       Serial.print("\xE2\x96\x88");
     }
   }
   
+  for(int i = value; i < upper; i++) {
+    if( i % res == 0) {
+      //Serial.print(" ");
+    }
+  }
+
+  Serial.print("\xE2\x96\x88");
+  
   Serial.print("\r\n");
 }
+
+
 
 struct piano_key_t;
 
@@ -64,7 +85,8 @@ struct sample_t {
 
   sample_t(uint16_t value, uint32_t time) : value(value), time(time) {}
 
-  sample_t() : value(0), time(0) {}
+  // "big" value since smaller ones are more active
+  sample_t() : value(1000), time(0) {}
 };
 
 struct sample_result_t {
@@ -75,7 +97,7 @@ struct sample_result_t {
   sample_result_t() : sample(), key() {}
 };
 
-const int SAMPLE_BUFFER_LENGTH = 32;
+const int SAMPLE_BUFFER_LENGTH = 64;
 struct sample_buf_t {
   sample_t buffer[SAMPLE_BUFFER_LENGTH];
 
@@ -87,6 +109,8 @@ struct sample_buf_t {
   void add_sample(sample_t sample) {
     /*this->begin =
         (this->begin + SAMPLE_BUFFER_LENGTH - 1) % SAMPLE_BUFFER_LENGTH;*/
+    this->begin++;
+    this->begin %= SAMPLE_BUFFER_LENGTH;
 
     this->buffer[this->begin] = sample;
     if (this->size < SAMPLE_BUFFER_LENGTH) {
@@ -98,11 +122,23 @@ struct sample_buf_t {
   // then the oldest still held sample is returned
   // if no samples exist, the sample will be "zero"
   sample_t read_nth_oldest(uint32_t n) {
+    //Serial.println("N is: " + String(n));
+    // clamp n
+    if (n > SAMPLE_BUFFER_LENGTH) [[unlikely]] {
+      n = SAMPLE_BUFFER_LENGTH;
+    }
+
     auto res = sample_t{0, 0};
     if (this->size == 0) {
       // keep default
     } else {
-      res = this->buffer[(n + this->begin) % SAMPLE_BUFFER_LENGTH];
+      auto start = this->begin;
+      auto with_room = start + SAMPLE_BUFFER_LENGTH;
+      auto offsetted = with_room - n;
+      auto idx = offsetted % SAMPLE_BUFFER_LENGTH;
+      //Serial.println("Returns idx: " + String(idx));
+      res = this->buffer[idx];
+      //res = this->buffer[(n + this->begin) % SAMPLE_BUFFER_LENGTH];
     }
 
     //print_value(res.value);
@@ -118,11 +154,71 @@ enum sample_priority_t {
   SAMPLE_PRIORITY_HIGH,
 };
 
+enum NOTE_STATE {
+  // No note is active,
+  NOTE_OFF,
+  
+  // additional state for damping?
+  
+  // A note is currently playing
+  // undamped
+  NOTE_ON,
+};
+
+enum KEY_STATE {
+  // the "laziest" state, no interaction
+  // is known to be active,
+  // poll rate is safe to be reduced
+  KEY_RESTING,
+
+  // _some_ interaction is occurring,
+  // but the key is not necessarily
+  // within the critical zone,
+  KEY_READY,
+  
+  // Key has reached between letoff and strike,
+  // highest priority sampling for accurate velocity here
+  KEY_CRITICAL,
+  
+  KEY_STRIKING,
+  
+  // additional states for repetition lever?
+};
+
+volatile uint32_t CANARY_VALUE = 123456;
+
+struct key_calibration_t {
+  volatile uint32_t canary = CANARY_VALUE;
+
+  uint16_t letoff_th_on = 240;
+  uint16_t letoff_th_off = 245;
+  
+  uint16_t strike_th_on = 210;
+  uint16_t strike_th_off = 215;
+  
+  uint16_t ready_th_on = 340;
+  uint16_t ready_th_off = 345;
+  
+  // bigger gap here just 'cuz
+  uint16_t damper_on_th_on = 300;
+  uint16_t damper_on_th_off = 290;
+  
+  key_calibration_t() {
+    if(this->canary != CANARY_VALUE) {
+      errorln("even bad during construction!");
+    }
+  }
+};
+
 struct piano_key_t {
-  uint16_t no_contact;
-  uint16_t bottomed_out;
-  uint16_t letoff_rest;
-  uint16_t damper_engage;
+  key_calibration_t calibration;
+  KEY_STATE keystate = KEY_RESTING;
+  NOTE_STATE notestate = NOTE_OFF;
+
+  //uint16_t no_contact;
+  //uint16_t bottomed_out;
+  //uint16_t letoff_rest;
+  //uint16_t damper_engage;
 
   uint8_t pin;
   uint8_t key_number;
@@ -139,6 +235,162 @@ struct piano_key_t {
   piano_key_t(uint8_t pin, uint8_t key_number)
       : pin(pin), key_number(key_number) {
     // restore calibration data?
+  }
+  
+  // this is where we handle state transitions
+  // and queue up event dispatches
+  // 
+  void process_samples() {
+    if (this->calibration.canary != CANARY_VALUE) {
+      errorln("canary mismatch!");
+      delay(10000);
+    }
+    auto latest = this->buf.read_nth_oldest(0);
+    bool note_played = false;
+    bool damper_on = false;
+    
+    switch (this->keystate) {
+      case KEY_RESTING:
+        if (latest.value < this->calibration.ready_th_on) {
+          this->keystate = KEY_READY;
+        }
+        // no break, allow directly flowing into READY in case this is a super hard hit
+        [[fallthrough]];
+      case KEY_READY:
+        if (latest.value > this->calibration.damper_on_th_on) {
+          damper_on = true;
+        } else if (latest.value < this->calibration.letoff_th_on) {
+          // passed letoff, now in critical
+          this->keystate = KEY_CRITICAL;
+        } else if(latest.value > this->calibration.ready_th_off) {
+          this->keystate = KEY_RESTING;
+        }
+        break; // no fallthrough since we want at least two samples within CRITICAL before STRIKE
+      case KEY_CRITICAL:
+        if (latest.value < this->calibration.strike_th_on) {
+          Serial.println("critical got note!");
+          Serial.println(latest.value);
+          Serial.println(this->calibration.strike_th_on);
+          // when the magic happens
+          note_played = true;
+          this->keystate = KEY_STRIKING;
+        } else if (latest.value > this->calibration.letoff_th_off) {
+          // note abandoned, but keep it active
+          this->keystate = KEY_READY;
+        }
+        break;
+      case KEY_STRIKING:
+        if (latest.value > this->calibration.letoff_th_off) {
+          // outside of CRITICAL, so allow new note to play
+          this->keystate = KEY_READY;
+        }
+    }
+    
+    if(note_played) {
+      this->strike_velocity(0);
+    }
+    
+    if(damper_on) {
+      this->damp(0);
+    }
+  }
+  
+  void damp(uint32_t n) {
+    if(this->notestate == NOTE_OFF) {
+      // do nothing if already damped
+      return;
+    }
+
+    #if defined(USB_MIDI)
+      usbMIDI.sendNoteOff(70 + this->key_number, 127, 0);
+      //usbMIDI.send_now();
+    #endif
+  }
+  
+  float linear_regression(Array<sample_t, SAMPLE_BUFFER_LENGTH> points) {
+    // subtract time of the first point, and value of the minimum
+    float min_x = points.back().time;
+    
+    float min_val = 1000;
+    for(auto point: points) {
+      if(point.value < min_val) {
+        min_val = point.value;
+      }
+    }
+
+    float sum_x = 0;
+    float sum_y = 0;
+    float sum_xmy = 0;
+    float sum_xmx = 0;
+    float n = points.size();
+    for(auto point: points) {
+      float x = (point.time - min_x);
+      float y = (point.value - min_val);
+      sum_x += x;
+      sum_y += y;
+      sum_xmy += x * y;
+      sum_xmx += x * x;
+    }
+    
+    float m_x = sum_x / n;
+    float m_y = sum_y / n;
+    
+    Serial.println("Means: " + String(m_x) + ", " + String(m_y));
+    
+    float SS_xy = sum_xmy - (n * m_y * m_x);
+    float SS_xx = sum_xmx - (n * m_x * m_x);
+    
+    float b_1 = SS_xy / SS_xx;
+    float b_0 = m_y - b_1 * m_x;
+    
+    return b_1 * -10000;
+  }
+  
+  // calculate the velocity of a strike
+  // precondition: a strike is (and should be) triggered
+  // n is the sample to start from, marking the "transient"
+  void strike_velocity(uint32_t n) {
+    Array<sample_t, SAMPLE_BUFFER_LENGTH> samples;
+    
+    for(int i = n; i < SAMPLE_BUFFER_LENGTH; i++) {
+
+      auto sample = this->buf.read_nth_oldest(i);
+      if (sample.value > this->calibration.letoff_th_off) {
+        // don't include it -- either noise or too old
+        // TODO: break out if multiple out of range
+      } else {
+        samples.push_back(sample);
+      }
+    }
+    
+    //Serial.println("Strike detected!");
+    for(auto& sample: samples) {
+      //Serial.print(sample.time);
+      //print_value(sample.value);
+    }
+
+    float velocity = linear_regression(samples);
+    // we want to curve map this since out of the box it's dumb
+
+    float new_velocity = pow(velocity, 0.5) * 7 - 8;
+
+    //Serial.println("Velocity: " + String(new_velocity));
+    
+    uint32_t velocity_i = new_velocity;
+    if (velocity_i > 127) {
+      velocity_i = 127;
+    } else if (velocity_i < 0) {
+      velocity_i = 0;
+    }
+    
+    #if defined(USB_MIDI)
+      usbMIDI.sendNoteOn(70 + this->key_number, velocity_i, 0);
+      //usbMIDI.send_now();
+    #endif
+    
+    this->notestate = NOTE_ON;
+    
+    //delay(10000);
   }
   
   void print_latest_sample() {
@@ -377,7 +629,7 @@ sample_all(Array<read_pair_t, PIANO_KEY_COUNT> pairs) {
 }
 
 void sample_batch() {
-  Serial.println("batch");
+  //Serial.println("batch");
   auto start = micros();
   Array<keypair_t, PIANO_KEY_COUNT> to_sample;
 
@@ -406,26 +658,31 @@ void sample_batch() {
     PIANO_KEYS.keys[sample.key.key].add_sample(sample.sample);
   }
   
+  // do processing
+  for (auto& key: PIANO_KEYS.keys) {
+    key.process_samples();
+  }
+  
   auto s_end = micros();
 
   // now, do any keys have a note that got played?
   auto end = micros();
   
-  Serial.print("Time to sample one round:");
-  Serial.println(end - start);
+  //Serial.print("Time to sample one round:");
+  //Serial.println(end - start);
   
   auto mid = micros();
-  for(int i = 0; i < 7; i++) {
-    PIANO_KEYS.keys[i].print_latest_sample();
+  for(int i = 0; i < 4; i++) {
+    //PIANO_KEYS.keys[i].print_latest_sample();
   }
 
-  Serial.println("");
+  //Serial.println("");
   
   end = micros();
   
-  Serial.println("Time to print: " + String(mid - start));
-  Serial.println("Time in batch: " + String(end - start));
-  Serial.println("Time to sample: " + String(s_end - sstart));
+  //Serial.println("Time to print: " + String(mid - start));
+  //Serial.println("Time in batch: " + String(end - start));
+  //Serial.println("Time to sample: " + String(s_end - sstart));
 }
 
 void test_micros_perf() {
@@ -454,7 +711,7 @@ void setup_adc() {
     auto &adci = adcs_info.adc[i];
     auto adcm = adci.adcm;
     //adcm->setAveraging(8);
-    adcm->setAveraging(8);
+    adcm->setAveraging(4);
     //adcm->setResolution(12);
     adcm->setSamplingSpeed(ADC_settings::ADC_SAMPLING_SPEED::HIGH_SPEED);
     // adc->checkPin()
@@ -463,7 +720,7 @@ void setup_adc() {
     }
   }
   
-  for (auto key: PIANO_KEYS.keys) {
+  for (auto& key: PIANO_KEYS.keys) {
     pinMode(key.pin, INPUT);
   }
 
@@ -478,16 +735,16 @@ void setup() {
   
   for(int i = 0; i < 20; i++) {
     Serial.println(i);
-    delay(100);
+    //delay(100);
   }
 }
 
 void loop() {
-  Serial.print("\033[2J\033[H");
+  //Serial.print("\033[2J\033[H");
   // put your main code here, to run repeatedly:
   // Serial.write(s);
   // test_micros_perf();
 
   sample_batch();
-  delay(6);
+  //delay(6);
 }

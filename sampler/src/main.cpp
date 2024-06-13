@@ -9,7 +9,14 @@
 #include <Array.h>
 #include <math.h>
 #include <cstdint>
-#if defined(USB_MIDI)
+
+#define USB_MIDI_SERIAL
+
+#if defined(USB_MIDI_SERIAL)
+#define ENABLE_MIDI
+#endif
+
+#if defined(ENABLE_MIDI)
   #include <MIDIUSB.h>
 #endif
 
@@ -20,7 +27,7 @@ void print_value(int value) {
   //int min = 200;
   //int max = 500;
   int lower = 210;
-  int upper = 350;
+  int upper = 550;
 
   value = value > upper ? upper : value;
   value = value - lower;
@@ -187,21 +194,42 @@ enum KEY_STATE {
 
 volatile uint32_t CANARY_VALUE = 123456;
 
+uint16_t DEFAULT_BOTTOM = 270;
+uint16_t DEFAULT_UP = 460;
+uint16_t DEFAULT_GAP = DEFAULT_UP - DEFAULT_BOTTOM;
+
 struct key_calibration_t {
   volatile uint32_t canary = CANARY_VALUE;
 
-  uint16_t letoff_th_on = 240;
-  uint16_t letoff_th_off = 245;
+  uint16_t letoff_th_on = DEFAULT_BOTTOM + 25;
+  uint16_t letoff_th_off = DEFAULT_BOTTOM + 30;
   
-  uint16_t strike_th_on = 210;
-  uint16_t strike_th_off = 215;
+  uint16_t strike_th_on = DEFAULT_BOTTOM + 5;
+  uint16_t strike_th_off = DEFAULT_BOTTOM + 10;
   
-  uint16_t ready_th_on = 340;
-  uint16_t ready_th_off = 345;
+  uint16_t ready_th_on = DEFAULT_UP - 55;
+  uint16_t ready_th_off = DEFAULT_UP - 50;
   
   // bigger gap here just 'cuz
-  uint16_t damper_on_th_on = 300;
-  uint16_t damper_on_th_off = 290;
+  uint16_t damper_on_th_on = DEFAULT_UP - 80;
+  uint16_t damper_on_th_off = DEFAULT_UP - 70;
+
+  int16_t resting_value = 500;
+
+  key_calibration_t(uint32_t bottom, uint32_t top) {
+      this->letoff_th_on = bottom + 35;
+      this->letoff_th_off = bottom + 40;
+      
+      this->strike_th_on = bottom + 5;
+      this->strike_th_off = bottom + 10;
+      
+      this->ready_th_on = top - 55;
+      this->ready_th_off = top - 50;
+      
+      // bigger gap here just 'cuz
+      this->damper_on_th_on = top - 80;
+      this->damper_on_th_off = top - 70;
+  }
   
   key_calibration_t() {
     if(this->canary != CANARY_VALUE) {
@@ -209,6 +237,9 @@ struct key_calibration_t {
     }
   }
 };
+
+uint32_t tops[16] = {501, 498, 489};
+uint32_t bottoms[16] = {340, 345, 348};
 
 struct piano_key_t {
   key_calibration_t calibration;
@@ -234,6 +265,7 @@ struct piano_key_t {
 
   piano_key_t(uint8_t pin, uint8_t key_number)
       : pin(pin), key_number(key_number) {
+    this->calibration = key_calibration_t(bottoms[key_number], tops[key_number]);
     // restore calibration data?
   }
   
@@ -248,39 +280,53 @@ struct piano_key_t {
     auto latest = this->buf.read_nth_oldest(0);
     bool note_played = false;
     bool damper_on = false;
+    bool damper_off = false;
     
     switch (this->keystate) {
       case KEY_RESTING:
         if (latest.value < this->calibration.ready_th_on) {
+          Serial.println("KEY ACTIVATES");
+          
+          // TODO: lift damper
           this->keystate = KEY_READY;
         }
-        // no break, allow directly flowing into READY in case this is a super hard hit
-        [[fallthrough]];
+        break;
       case KEY_READY:
         if (latest.value > this->calibration.damper_on_th_on) {
           damper_on = true;
+        } else if (latest.value < this->calibration.damper_on_th_off) {
+          damper_off = true;
+        }
+        if (latest.value > this->calibration.ready_th_off) {
+          Serial.println("Goes back to resting...");
+          this->keystate = KEY_RESTING;
         } else if (latest.value < this->calibration.letoff_th_on) {
           // passed letoff, now in critical
           this->keystate = KEY_CRITICAL;
+          Serial.println("letoff lets go");
         } else if(latest.value > this->calibration.ready_th_off) {
+          Serial.println("key up");
           this->keystate = KEY_RESTING;
         }
         break; // no fallthrough since we want at least two samples within CRITICAL before STRIKE
       case KEY_CRITICAL:
         if (latest.value < this->calibration.strike_th_on) {
-          Serial.println("critical got note!");
-          Serial.println(latest.value);
-          Serial.println(this->calibration.strike_th_on);
+          Serial.println("STRIKE");
+          //Serial.println("critical got note!");
+          //Serial.println(latest.value);
+          //Serial.println(this->calibration.strike_th_on);
           // when the magic happens
           note_played = true;
           this->keystate = KEY_STRIKING;
         } else if (latest.value > this->calibration.letoff_th_off) {
           // note abandoned, but keep it active
+          Serial.println("note abandoned");
           this->keystate = KEY_READY;
         }
         break;
       case KEY_STRIKING:
         if (latest.value > this->calibration.letoff_th_off) {
+          Serial.println("letoff resets");
           // outside of CRITICAL, so allow new note to play
           this->keystate = KEY_READY;
         }
@@ -293,6 +339,28 @@ struct piano_key_t {
     if(damper_on) {
       this->damp(0);
     }
+    
+    if(damper_off) {
+      this->undamp();
+    }
+  }
+  
+  void undamp() {
+
+    if(this->notestate == NOTE_ON) {
+      // do nothing if already undamped
+      return;
+    }
+    
+    this->notestate = NOTE_ON;
+
+    Serial.println("Undamp...");
+    // TODO: figure out how to send a damper off for an unplayed key?
+    return;
+    
+    #if defined(ENABLE_MIDI)
+    usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
+    #endif
   }
   
   void damp(uint32_t n) {
@@ -300,8 +368,11 @@ struct piano_key_t {
       // do nothing if already damped
       return;
     }
+    
+    this->notestate = NOTE_OFF;
 
-    #if defined(USB_MIDI)
+    Serial.println("Damper back on");
+    #if defined(ENABLE_MIDI)
       usbMIDI.sendNoteOff(70 + this->key_number, 127, 0);
       //usbMIDI.send_now();
     #endif
@@ -335,7 +406,7 @@ struct piano_key_t {
     float m_x = sum_x / n;
     float m_y = sum_y / n;
     
-    Serial.println("Means: " + String(m_x) + ", " + String(m_y));
+    //Serial.println("Means: " + String(m_x) + ", " + String(m_y));
     
     float SS_xy = sum_xmy - (n * m_y * m_x);
     float SS_xx = sum_xmx - (n * m_x * m_x);
@@ -364,17 +435,26 @@ struct piano_key_t {
     }
     
     //Serial.println("Strike detected!");
-    for(auto& sample: samples) {
-      //Serial.print(sample.time);
-      //print_value(sample.value);
-    }
 
     float velocity = linear_regression(samples);
     // we want to curve map this since out of the box it's dumb
 
     float new_velocity = pow(velocity, 0.5) * 7 - 8;
+    
+    int first_time = 0;
+    if(!samples.empty()) {
+      first_time = samples.back().time;
+    }
 
-    //Serial.println("Velocity: " + String(new_velocity));
+    Serial.println("Velocity: " + String(new_velocity));
+    Serial.println("Strike profile:");
+    for(int i = samples.size() - 1; i >= 0; i--) {
+      Serial.printf("%5d -- ", samples[i].time - first_time);
+      print_value(samples[i].value);
+    }
+    /*for(auto& sample: samples) {
+      //Serial.print(sample.time);
+    }*/
     
     uint32_t velocity_i = new_velocity;
     if (velocity_i > 127) {
@@ -383,14 +463,12 @@ struct piano_key_t {
       velocity_i = 0;
     }
     
-    #if defined(USB_MIDI)
+    #if defined(ENABLE_MIDI)
       usbMIDI.sendNoteOn(70 + this->key_number, velocity_i, 0);
       //usbMIDI.send_now();
     #endif
     
     this->notestate = NOTE_ON;
-    
-    //delay(10000);
   }
   
   void print_latest_sample() {
@@ -629,18 +707,13 @@ sample_all(Array<read_pair_t, PIANO_KEY_COUNT> pairs) {
 }
 
 void sample_batch() {
-  //Serial.println("batch");
-  auto start = micros();
+  auto ts_a = micros();
   Array<keypair_t, PIANO_KEY_COUNT> to_sample;
 
   for (int i = 0; i < PIANO_KEY_COUNT; i++) {
     auto &key = PIANO_KEYS.keys[i];
 
     if (key.sample_due()) {
-      /*Serial.print("sampling key: ");
-      Serial.print(key.pin);
-      Serial.print(", ");
-      Serial.println(key.key_number);*/
       to_sample.push_back(key.keypair());
     }
   }
@@ -651,8 +724,6 @@ void sample_batch() {
   auto sstart = micros();
 
   auto samples = sample_all(read_pairs);
-  
-  //Serial.println("Sample round");
 
   for (auto sample : samples) {
     PIANO_KEYS.keys[sample.key.key].add_sample(sample.sample);
@@ -672,9 +743,10 @@ void sample_batch() {
   //Serial.println(end - start);
   
   auto mid = micros();
-  for(int i = 0; i < 4; i++) {
-    //PIANO_KEYS.keys[i].print_latest_sample();
+  for(int i = 0; i <= -1; i++) {
+    PIANO_KEYS.keys[i].print_latest_sample();
   }
+  //delay(5);
 
   //Serial.println("");
   
@@ -711,9 +783,9 @@ void setup_adc() {
     auto &adci = adcs_info.adc[i];
     auto adcm = adci.adcm;
     //adcm->setAveraging(8);
-    adcm->setAveraging(4);
+    adcm->setAveraging(2);
     //adcm->setResolution(12);
-    adcm->setSamplingSpeed(ADC_settings::ADC_SAMPLING_SPEED::HIGH_SPEED);
+    adcm->setSamplingSpeed(ADC_settings::ADC_SAMPLING_SPEED::VERY_HIGH_SPEED);
     // adc->checkPin()
     for (int i = A0; i <= A17; i++) {
       adci.allowed_pins[i] = adcm->checkPin(i);
@@ -735,7 +807,6 @@ void setup() {
   
   for(int i = 0; i < 20; i++) {
     Serial.println(i);
-    //delay(100);
   }
 }
 
@@ -746,5 +817,4 @@ void loop() {
   // test_micros_perf();
 
   sample_batch();
-  //delay(6);
 }

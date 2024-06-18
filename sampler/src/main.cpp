@@ -11,6 +11,8 @@
 #include <cstdint>
 
 #define USB_MIDI_SERIAL
+#define COUNTERS_ENABLED false
+#define PROFILE_ENABLED false
 
 #if defined(USB_MIDI_SERIAL)
 #define ENABLE_MIDI
@@ -20,15 +22,16 @@
   #include <MIDIUSB.h>
 #endif
 
-#define unlikely() ()
+uint32_t counter = 0;
 
-void print_value(int value) {
+void wait(uint32_t prior, uint32_t later) {
+    while(micros() - prior < later) {
+        // do nothing
+    }
+}
+
+void print_bounds(int value, int upper, int lower) {
   Serial.print(value);
-  //int min = 200;
-  //int max = 500;
-  int lower = 210;
-  int upper = 550;
-
   value = value > upper ? upper : value;
   value = value - lower;
   
@@ -53,6 +56,18 @@ void print_value(int value) {
   Serial.print("\r\n");
 }
 
+void print_value(int value) {
+  //int min = 200;
+  //int max = 500;
+  int lower = 210;
+  int upper = 550;
+  print_bounds(value, upper, lower);
+
+}
+
+void gap(uint32_t a, uint32_t b, String m) {
+    Serial.println("Gap: " + m + " | " + String(b - a));
+}
 
 
 struct piano_key_t;
@@ -104,14 +119,14 @@ struct sample_result_t {
   sample_result_t() : sample(), key() {}
 };
 
-const int SAMPLE_BUFFER_LENGTH = 64;
+const int SAMPLE_BUFFER_LENGTH = 256; // this should capture a dx for even the softest notes
 struct sample_buf_t {
   sample_t buffer[SAMPLE_BUFFER_LENGTH];
 
   // begin points at the newest sample,
   // and (begin + 1) % SAMPLE_BUFFER_LENGTH is the next newest
-  uint8_t begin = 0;
-  uint8_t size = 0;
+  uint32_t begin = 0;
+  uint32_t size = 0;
 
   void add_sample(sample_t sample) {
     /*this->begin =
@@ -211,8 +226,8 @@ struct key_calibration_t {
   uint16_t ready_th_off = DEFAULT_UP - 50;
   
   // bigger gap here just 'cuz
-  uint16_t damper_on_th_on = DEFAULT_UP - 80;
-  uint16_t damper_on_th_off = DEFAULT_UP - 70;
+  uint16_t damper_on_th_on = DEFAULT_UP - 60;
+  uint16_t damper_on_th_off = DEFAULT_UP - 90;
 
   int16_t resting_value = 500;
 
@@ -227,8 +242,8 @@ struct key_calibration_t {
       this->ready_th_off = top - 50;
       
       // bigger gap here just 'cuz
-      this->damper_on_th_on = top - 80;
-      this->damper_on_th_off = top - 70;
+      this->damper_on_th_on = top - 60;
+      this->damper_on_th_off = top - 90;
   }
   
   key_calibration_t() {
@@ -343,6 +358,11 @@ struct piano_key_t {
     if(damper_off) {
       this->undamp();
     }
+
+    if(damper_on && damper_off) {
+        errorln("bro");
+        delay(1000);
+    }
   }
   
   void undamp() {
@@ -422,15 +442,26 @@ struct piano_key_t {
   // n is the sample to start from, marking the "transient"
   void strike_velocity(uint32_t n) {
     Array<sample_t, SAMPLE_BUFFER_LENGTH> samples;
+
+    uint32_t mins = UINT32_MAX;
+    uint32_t maxs = 0;
     
     for(int i = n; i < SAMPLE_BUFFER_LENGTH; i++) {
-
       auto sample = this->buf.read_nth_oldest(i);
-      if (sample.value > this->calibration.letoff_th_off) {
+
+      if (sample.value > this->calibration.letoff_th_on) {
         // don't include it -- either noise or too old
         // TODO: break out if multiple out of range
+      } else if(sample.value < this->calibration.strike_th_on) {
+        // these values can be suspect, as they occur "at the bottom"
+        // and tend to flatten out. Excluding these as well as those
+        // from before letoff means we get a very clean reading of the
+        // unobstructed, unimpeded movement of the hammer
+        // right before "hitting the string"
       } else {
         samples.push_back(sample);
+        mins = min(sample.value, mins);
+        maxs = max(sample.value, maxs);
       }
     }
     
@@ -448,13 +479,27 @@ struct piano_key_t {
 
     Serial.println("Velocity: " + String(new_velocity));
     Serial.println("Strike profile:");
-    for(int i = samples.size() - 1; i >= 0; i--) {
-      Serial.printf("%5d -- ", samples[i].time - first_time);
-      print_value(samples[i].value);
+    Serial.printf("Threshold for KEY_CRITICAL: %d\r\n", this->calibration.letoff_th_on);
+    Serial.printf("Threshold for KEY_STRIKING: %d\r\n", this->calibration.strike_th_on);
+    Serial.println("Max observed: " + String(maxs));
+    Serial.println("Min observed: " + String(mins));
+
+
+    if(PROFILE_ENABLED) {
+        //float points = min((float)samples.size(), 32.0);
+        //float gap = max((float)samples.size() / 32.0, 1.0);
+        for(int i = samples.size() - 1; i >= 0; i-= 1) {
+          Serial.printf("%10d -- ", samples[i].time);
+          Serial.printf("%5d -- ", samples[i].time - first_time);
+          print_value(samples[i].value);
+        }
+        /*for(auto& sample: samples) {
+          //Serial.print(sample.time);
+        }*/
     }
-    /*for(auto& sample: samples) {
-      //Serial.print(sample.time);
-    }*/
+
+    Serial.println("Velocity: " + String(new_velocity));
+    print_bounds(new_velocity, 250, 0);
     
     uint32_t velocity_i = new_velocity;
     if (velocity_i > 127) {
@@ -489,19 +534,12 @@ struct piano_key_t {
 
   sample_priority_t add_sample(sample_t sample) {
     this->buf.add_sample(sample);
+    this->last_sample = sample.time;
     
     return SAMPLE_PRIORITY_HIGH;
   }
 
   keypair_t keypair() { return keypair_t(this->pin, this->key_number); }
-
-  // a lower bound for when we would want the next sample by
-  // if this is 0, we want a sample soon with priority
-  uint32_t next_sample_due() {
-    errorln("bad call to next_sample_due");
-    
-    return 0;
-  }
 
   // based on current priority
   uint32_t sample_period() {
@@ -514,10 +552,20 @@ struct piano_key_t {
     return period;
   }
 
-  bool sample_due() {
-    return true;
+  uint32_t last_sample = 0;
 
-    auto now = micros();
+  bool sample_due(uint32_t now) {
+    auto gap = now - this->last_sample;
+    auto resting_period = 500;
+
+    if (gap < resting_period && this->keystate == KEY_RESTING) {
+        // sample at least once per millisecond
+        return false;
+    } else {
+        return true;
+    }
+
+    /*auto now = micros();
     auto last = this->buf.read_nth_oldest(0).time;
     auto since = now - last; // underflow is fine
 
@@ -525,7 +573,7 @@ struct piano_key_t {
       return true;
     } else {
       return false;
-    }
+    }*/
   }
 };
 
@@ -663,7 +711,7 @@ sample_all(Array<read_pair_t, PIANO_KEY_COUNT> pairs) {
   Array<sample_result_t, PIANO_KEY_COUNT> results;
 
   for (auto pair : pairs) {
-    if (pair.pin1.pin == INVALID_PIN || pair.pin2.pin == INVALID_PIN) {
+    if (pair.pin1.pin == INVALID_PIN || pair.pin2.pin == INVALID_PIN) [[unlikely]] {
       keypair_t read;
       if(pair.pin1.pin == INVALID_PIN) {
         read = pair.pin2;
@@ -674,7 +722,7 @@ sample_all(Array<read_pair_t, PIANO_KEY_COUNT> pairs) {
       auto sample = adc->analogRead(read.pin);
       auto now = micros();
       
-      if (sample == ADC_ERROR_VALUE) {
+      if (sample == ADC_ERROR_VALUE) [[unlikely]] {
         Serial.println("eeeerrror");
         continue;
       }
@@ -686,6 +734,7 @@ sample_all(Array<read_pair_t, PIANO_KEY_COUNT> pairs) {
     } else {
       auto res = adc->analogSynchronizedRead(pair.pin1.pin, pair.pin2.pin);
       auto now = micros();
+
       if (res.result_adc0 == ADC_ERROR_VALUE) [[unlikely]] {
         Serial.print("pin read was invalid:");
         Serial.print(pair.pin1.pin);
@@ -710,31 +759,42 @@ void sample_batch() {
   auto ts_a = micros();
   Array<keypair_t, PIANO_KEY_COUNT> to_sample;
 
+  uint32_t now = micros();
+
   for (int i = 0; i < PIANO_KEY_COUNT; i++) {
     auto &key = PIANO_KEYS.keys[i];
 
-    if (key.sample_due()) {
+    if (key.sample_due(now)) {
       to_sample.push_back(key.keypair());
     }
   }
 
-  auto read_pairs = order_reads(to_sample);
-  
-  //Serial.println("Ordered reads:");
-  auto sstart = micros();
+  if(counter % 1000 == 0 && COUNTERS_ENABLED) {
+      Serial.println("Number of keys to sample:" + String(to_sample.size()));
+  }
 
+  auto ts_b = micros();
+
+  auto read_pairs = order_reads(to_sample);
+
+  auto ts_c = micros();
+  
   auto samples = sample_all(read_pairs);
+
+  auto ts_d = micros();
 
   for (auto sample : samples) {
     PIANO_KEYS.keys[sample.key.key].add_sample(sample.sample);
   }
+
+  auto ts_e = micros();
   
   // do processing
   for (auto& key: PIANO_KEYS.keys) {
     key.process_samples();
   }
-  
-  auto s_end = micros();
+
+  auto ts_f = micros();
 
   // now, do any keys have a note that got played?
   auto end = micros();
@@ -746,11 +806,23 @@ void sample_batch() {
   for(int i = 0; i <= -1; i++) {
     PIANO_KEYS.keys[i].print_latest_sample();
   }
-  //delay(5);
+
+  auto ts_g = micros();
 
   //Serial.println("");
   
   end = micros();
+
+  if(false) {
+      gap(ts_a, ts_b, "dues");
+      gap(ts_b, ts_c, "order");
+      gap(ts_c, ts_d, "sample");
+      gap(ts_d, ts_e, "add");
+      gap(ts_e, ts_f, "process");
+      gap(ts_f, ts_g, "print");
+      gap(ts_a, end, "total");
+      delay(10);
+  }
   
   //Serial.println("Time to print: " + String(mid - start));
   //Serial.println("Time in batch: " + String(end - start));
@@ -796,6 +868,18 @@ void setup_adc() {
     pinMode(key.pin, INPUT);
   }
 
+  for(int i = 3; i < 16; i++) {
+      auto& k = PIANO_KEYS.keys[i];
+      pinMode(k.pin, INPUT_PULLUP);
+      tops[i] = 300;
+      bottoms[i] = 0;
+
+      delay(10);
+
+      auto v = analogRead(k.pin);
+      print_value(v);
+  }
+
   //auto mid = micros();
 }
 
@@ -808,7 +892,14 @@ void setup() {
   for(int i = 0; i < 20; i++) {
     Serial.println(i);
   }
+
+  for(auto& k: PIANO_KEYS.keys) {
+      k = piano_key_t(k.pin, k.key_number);
+  }
 }
+
+uint32_t last = 0;
+uint32_t ts_c = 0;
 
 void loop() {
   //Serial.print("\033[2J\033[H");
@@ -816,5 +907,28 @@ void loop() {
   // Serial.write(s);
   // test_micros_perf();
 
-  sample_batch();
+  if(counter++ % 1000 == 0 && COUNTERS_ENABLED) {
+      auto ts_cn = micros();
+
+      gap(ts_c, ts_cn, "per 1000");
+
+      ts_c = ts_cn;
+  }
+
+  auto now = micros();
+  last = now;
+
+  auto ts_a = micros();
+  for(int i = 0; i <= 0; i++) {
+    // for each bit
+    for(int b = 0; b < 3; b++) {
+        uint8_t bit = (i >> b) & 1;
+        digitalWrite(b, bit);
+    }
+    sample_batch();
+  }
+  auto ts_b = micros();
+
+
+  //gap(ts_a, ts_b, "gap");
 }

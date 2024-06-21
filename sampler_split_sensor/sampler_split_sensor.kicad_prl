@@ -1,6 +1,6 @@
 {
   "board": {
-    "active_layer": 36,
+    "active_layer": 2,
     "active_layer_preset": "",
     "auto_track_width": true,
     "hidden_netclasses": [],
@@ -11,7 +11,7 @@
       "images": 0.6,
       "pads": 1.0,
       "tracks": 1.0,
-      "vias": 0.05999999865889549,
+      "vias": 1.0,
       "zones": 0.6
     },
     "selection_filter": {
@@ -64,7 +64,7 @@
       39,
       40
     ],
-    "visible_layers": "7fc3021_ffffffff",
+    "visible_layers": "0001010_80000007",
     "zone_display_mode": 0
   },
   "git": {
@@ -74,7 +74,7 @@
     "ssh_key": ""
   },
   "meta": {
-    "filename": "sensor_bar_unified_muxing_1.kicad_prl",
+    "filename": "sampler_split_sensor.kicad_prl",
     "version": 3
   },
   "project": {

@@ -253,8 +253,10 @@ struct key_calibration_t {
   }
 };
 
-uint32_t tops[16] = {501, 498, 489};
-uint32_t bottoms[16] = {340, 345, 348};
+//uint32_t tops[16] = {501, 498, 489};
+//uint32_t bottoms[16] = {340, 345, 348};
+uint32_t tops[16] = {748};
+uint32_t bottoms[16] = {300};
 
 struct piano_key_t {
   key_calibration_t calibration;
@@ -470,7 +472,8 @@ struct piano_key_t {
     float velocity = linear_regression(samples);
     // we want to curve map this since out of the box it's dumb
 
-    float new_velocity = pow(velocity, 0.5) * 7 - 8;
+    //float new_velocity = pow(velocity, 1) * 7 - 8;
+    float new_velocity = velocity / 5;
     
     int first_time = 0;
     if(!samples.empty()) {
@@ -868,7 +871,7 @@ void setup_adc() {
     pinMode(key.pin, INPUT);
   }
 
-  for(int i = 3; i < 16; i++) {
+  for(int i = 1; i < 16; i++) {
       auto& k = PIANO_KEYS.keys[i];
       pinMode(k.pin, INPUT_PULLUP);
       tops[i] = 300;

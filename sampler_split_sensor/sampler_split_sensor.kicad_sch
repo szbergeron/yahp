@@ -6718,15 +6718,6 @@
 		(color 0 0 0 0)
 		(uuid "fddcb3e1-6a99-446f-b41f-483803105460")
 	)
-	(bus_entry
-		(at 210.82 264.16)
-		(size 2.54 2.54)
-		(stroke
-			(width 0)
-			(type default)
-		)
-		(uuid "4536cff6-1dfc-4925-bc4b-d0e3ff179145")
-	)
 	(wire
 		(pts
 			(xy 648.97 572.77) (xy 591.82 572.77)
@@ -6800,7 +6791,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 234.95) (xy 281.94 234.95)
+			(xy 224.79 234.95) (xy 281.94 234.95)
 		)
 		(stroke
 			(width 0)
@@ -6933,7 +6924,7 @@
 	)
 	(wire
 		(pts
-			(xy 119.38 257.81) (xy 162.56 257.81)
+			(xy 119.38 257.81) (xy 168.91 257.81)
 		)
 		(stroke
 			(width 0)
@@ -7026,7 +7017,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 240.03) (xy 276.86 240.03)
+			(xy 224.79 240.03) (xy 276.86 240.03)
 		)
 		(stroke
 			(width 0)
@@ -7290,7 +7281,7 @@
 	)
 	(wire
 		(pts
-			(xy 111.76 250.19) (xy 162.56 250.19)
+			(xy 111.76 250.19) (xy 168.91 250.19)
 		)
 		(stroke
 			(width 0)
@@ -8190,7 +8181,7 @@
 	)
 	(wire
 		(pts
-			(xy 138.43 219.71) (xy 162.56 219.71)
+			(xy 138.43 219.71) (xy 168.91 219.71)
 		)
 		(stroke
 			(width 0)
@@ -8330,7 +8321,7 @@
 	)
 	(wire
 		(pts
-			(xy 233.68 217.17) (xy 218.44 217.17)
+			(xy 233.68 217.17) (xy 224.79 217.17)
 		)
 		(stroke
 			(width 0)
@@ -8655,7 +8646,7 @@
 	)
 	(wire
 		(pts
-			(xy 116.84 255.27) (xy 162.56 255.27)
+			(xy 116.84 255.27) (xy 168.91 255.27)
 		)
 		(stroke
 			(width 0)
@@ -8756,7 +8747,7 @@
 	)
 	(wire
 		(pts
-			(xy 114.3 252.73) (xy 162.56 252.73)
+			(xy 114.3 252.73) (xy 168.91 252.73)
 		)
 		(stroke
 			(width 0)
@@ -8869,7 +8860,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 232.41) (xy 284.48 232.41)
+			(xy 224.79 232.41) (xy 284.48 232.41)
 		)
 		(stroke
 			(width 0)
@@ -8931,7 +8922,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 257.81) (xy 309.88 257.81)
+			(xy 224.79 257.81) (xy 309.88 257.81)
 		)
 		(stroke
 			(width 0)
@@ -9001,7 +8992,7 @@
 	)
 	(wire
 		(pts
-			(xy 143.51 214.63) (xy 162.56 214.63)
+			(xy 143.51 214.63) (xy 168.91 214.63)
 		)
 		(stroke
 			(width 0)
@@ -9295,7 +9286,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 229.87) (xy 287.02 229.87)
+			(xy 224.79 229.87) (xy 287.02 229.87)
 		)
 		(stroke
 			(width 0)
@@ -9536,7 +9527,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 222.25) (xy 294.64 222.25)
+			(xy 224.79 222.25) (xy 294.64 222.25)
 		)
 		(stroke
 			(width 0)
@@ -10004,7 +9995,7 @@
 	)
 	(wire
 		(pts
-			(xy 135.89 222.25) (xy 162.56 222.25)
+			(xy 135.89 222.25) (xy 168.91 222.25)
 		)
 		(stroke
 			(width 0)
@@ -10635,7 +10626,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 237.49) (xy 279.4 237.49)
+			(xy 224.79 237.49) (xy 279.4 237.49)
 		)
 		(stroke
 			(width 0)
@@ -11322,7 +11313,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 214.63) (xy 227.33 214.63)
+			(xy 224.79 214.63) (xy 227.33 214.63)
 		)
 		(stroke
 			(width 0)
@@ -11414,7 +11405,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 219.71) (xy 297.18 219.71)
+			(xy 224.79 219.71) (xy 297.18 219.71)
 		)
 		(stroke
 			(width 0)
@@ -11678,7 +11669,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 252.73) (xy 314.96 252.73)
+			(xy 224.79 252.73) (xy 314.96 252.73)
 		)
 		(stroke
 			(width 0)
@@ -11778,7 +11769,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 242.57) (xy 274.32 242.57)
+			(xy 224.79 242.57) (xy 274.32 242.57)
 		)
 		(stroke
 			(width 0)
@@ -12022,7 +12013,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 227.33) (xy 289.56 227.33)
+			(xy 224.79 227.33) (xy 289.56 227.33)
 		)
 		(stroke
 			(width 0)
@@ -12173,7 +12164,7 @@
 	)
 	(wire
 		(pts
-			(xy 140.97 217.17) (xy 162.56 217.17)
+			(xy 140.97 217.17) (xy 168.91 217.17)
 		)
 		(stroke
 			(width 0)
@@ -13285,7 +13276,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 250.19) (xy 317.5 250.19)
+			(xy 224.79 250.19) (xy 317.5 250.19)
 		)
 		(stroke
 			(width 0)
@@ -13770,7 +13761,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 224.79) (xy 292.1 224.79)
+			(xy 224.79 224.79) (xy 292.1 224.79)
 		)
 		(stroke
 			(width 0)
@@ -13851,7 +13842,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 255.27) (xy 312.42 255.27)
+			(xy 224.79 255.27) (xy 312.42 255.27)
 		)
 		(stroke
 			(width 0)
@@ -13972,7 +13963,7 @@
 	)
 	(wire
 		(pts
-			(xy 218.44 212.09) (xy 262.89 212.09)
+			(xy 224.79 212.09) (xy 262.89 212.09)
 		)
 		(stroke
 			(width 0)
@@ -21086,7 +21077,7 @@
 	)
 	(symbol
 		(lib_id "teensy:Teensy4.1")
-		(at 190.5 266.7 0)
+		(at 196.85 266.7 0)
 		(unit 1)
 		(exclude_from_sim no)
 		(in_bom yes)
@@ -21095,7 +21086,7 @@
 		(fields_autoplaced yes)
 		(uuid "918b3e0e-1f28-47b6-b508-a0217225c246")
 		(property "Reference" "U1"
-			(at 190.5 200.66 0)
+			(at 196.85 200.66 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21103,7 +21094,7 @@
 			)
 		)
 		(property "Value" "Teensy4.1"
-			(at 190.5 203.2 0)
+			(at 196.85 203.2 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21111,7 +21102,7 @@
 			)
 		)
 		(property "Footprint" "teensy:Teensy41"
-			(at 180.34 256.54 0)
+			(at 186.69 256.54 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21120,7 +21111,7 @@
 			)
 		)
 		(property "Datasheet" ""
-			(at 180.34 256.54 0)
+			(at 186.69 256.54 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -21129,7 +21120,7 @@
 			)
 		)
 		(property "Description" ""
-			(at 190.5 266.7 0)
+			(at 196.85 266.7 0)
 			(effects
 				(font
 					(size 1.27 1.27)
@@ -22038,6 +22029,299 @@
 			(project "sensor_bar_unified_muxing_1"
 				(path "/5f322732-5519-418a-bacc-a0f197c6f475"
 					(reference "U10")
+					(unit 1)
+				)
+			)
+		)
+	)
+	(symbol
+		(lib_id "mine:TSW-120-20-S-D-LL")
+		(at 142.24 135.89 0)
+		(unit 1)
+		(exclude_from_sim no)
+		(in_bom yes)
+		(on_board yes)
+		(dnp no)
+		(fields_autoplaced yes)
+		(uuid "a97a6b12-6261-4d6a-bf32-a01aad5ef680")
+		(property "Reference" "J6"
+			(at 142.24 102.87 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Value" "TSW-120-20-S-D-LL"
+			(at 142.24 105.41 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+			)
+		)
+		(property "Footprint" "mine:SAMTEC_TSW-120-20-S-D-LL"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "Datasheet" ""
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "Description" ""
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(hide yes)
+			)
+		)
+		(property "MF" "Samtec"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "Description_1" "\nCONN HEADER VERT 40POS 2.54MM\n"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "Package" "None"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "Price" "None"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "Check_prices" "https://www.snapeda.com/parts/TSW-120-20-S-D-LL/Samtec/view-part/?ref=eda"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "STANDARD" "Manufacturer Recommendations"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "PARTREV" "R"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "SnapEDA_Link" "https://www.snapeda.com/parts/TSW-120-20-S-D-LL/Samtec/view-part/?ref=snap"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "MP" "TSW-120-20-S-D-LL"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "Availability" "In Stock"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(property "MANUFACTURER" "Samtec"
+			(at 142.24 135.89 0)
+			(effects
+				(font
+					(size 1.27 1.27)
+				)
+				(justify bottom)
+				(hide yes)
+			)
+		)
+		(pin "17"
+			(uuid "5d77202f-3f1e-461c-9010-d1d0596b8ae5")
+		)
+		(pin "02"
+			(uuid "c698ce99-9dbd-4d04-b57c-7b6add741632")
+		)
+		(pin "03"
+			(uuid "c83ebf05-e5fb-4f33-803c-99667bde9029")
+		)
+		(pin "21"
+			(uuid "2bf85bb4-d058-4cb0-a47b-5815fc5c1b6a")
+		)
+		(pin "07"
+			(uuid "9077a69f-b21f-49df-849a-7bad27c92062")
+		)
+		(pin "11"
+			(uuid "b15c675e-cacb-4ab3-92f4-4c479a096d4c")
+		)
+		(pin "40"
+			(uuid "577eff30-3800-4e89-b86a-09ac2d2d8321")
+		)
+		(pin "12"
+			(uuid "06b2fbca-cd46-488e-81c2-ea9101af3fe4")
+		)
+		(pin "36"
+			(uuid "28f08155-e29b-4ae5-9691-f2e1ba9d3a74")
+		)
+		(pin "38"
+			(uuid "71dbc30d-5e61-4854-a8da-47d5597abf56")
+		)
+		(pin "35"
+			(uuid "58dc718c-2fbc-4cb3-93a9-31129964448a")
+		)
+		(pin "37"
+			(uuid "bfa46c41-9335-4c6c-8901-2052acadb2f9")
+		)
+		(pin "20"
+			(uuid "f7302291-2a4b-49e0-9abf-54d853388b71")
+		)
+		(pin "15"
+			(uuid "63181e17-0321-49d3-aeb2-9023d5a697b0")
+		)
+		(pin "22"
+			(uuid "37eee90d-d3a6-4cad-8762-01eb914f97d9")
+		)
+		(pin "01"
+			(uuid "dbf623dd-40a0-42b6-af3c-8e91f784e28a")
+		)
+		(pin "30"
+			(uuid "7ac52c17-74a5-4724-baa6-94e3f62ed39e")
+		)
+		(pin "08"
+			(uuid "70a78073-3ccd-4114-987f-ce22262ee7fa")
+		)
+		(pin "18"
+			(uuid "a0b6013d-6333-4088-863e-80dcc42fe7f9")
+		)
+		(pin "33"
+			(uuid "2db8ba6a-fd5f-4827-b1c5-9154c7d0dafc")
+		)
+		(pin "31"
+			(uuid "7fd195c7-8d35-4a5f-8e17-fc81ee44838f")
+		)
+		(pin "29"
+			(uuid "92072c55-6b45-40fa-93c4-a319f58bd9db")
+		)
+		(pin "34"
+			(uuid "19f3d88f-ec6e-4cf8-8ba1-fe92847122d7")
+		)
+		(pin "14"
+			(uuid "3808346d-9aa5-4adf-bb58-2bea824ee134")
+		)
+		(pin "16"
+			(uuid "08ab7e46-8e24-4b48-95ea-32261e743a4a")
+		)
+		(pin "09"
+			(uuid "85f4f370-6a48-4007-8806-17b8cbe5fecd")
+		)
+		(pin "27"
+			(uuid "0f85c76b-cd07-4840-bb1a-6b8bb58d4f46")
+		)
+		(pin "04"
+			(uuid "1ca993c8-0767-4b57-8780-6f97cf395664")
+		)
+		(pin "19"
+			(uuid "6790e165-e25d-4c24-804a-fc1c4f4e9e1a")
+		)
+		(pin "32"
+			(uuid "1a4752c0-1187-4e62-b8fb-a0c0d6b419e1")
+		)
+		(pin "05"
+			(uuid "e05643a4-4cec-40fe-a230-2b0d9385fea9")
+		)
+		(pin "06"
+			(uuid "19bf5195-a417-44ed-8404-50c67e2abb41")
+		)
+		(pin "28"
+			(uuid "64ad3b62-8822-4ebc-afe7-93391a93bf4c")
+		)
+		(pin "39"
+			(uuid "1758c3e8-ad15-4e3d-b22f-7c20a459c849")
+		)
+		(pin "10"
+			(uuid "b69cfcfe-7321-4bbe-87e7-e0915c9dc51d")
+		)
+		(pin "25"
+			(uuid "a6741bab-aeea-4dc9-8457-4ee972dc6616")
+		)
+		(pin "24"
+			(uuid "e3dd870d-8988-4fd3-85a5-615794297001")
+		)
+		(pin "13"
+			(uuid "e6e6cd70-66ea-4f10-9604-51c5ad118652")
+		)
+		(pin "23"
+			(uuid "d958e09e-8ec0-48c1-b614-e09c026d6819")
+		)
+		(pin "26"
+			(uuid "6d372ebf-8cda-4f8c-9113-2d8a5c30c7f5")
+		)
+		(instances
+			(project "sampler_split_sensor"
+				(path "/5f322732-5519-418a-bacc-a0f197c6f475"
+					(reference "J6")
 					(unit 1)
 				)
 			)

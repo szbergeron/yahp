@@ -9,6 +9,7 @@
 #include <Array.h>
 #include <math.h>
 #include <cstdint>
+#include "config.cpp"
 
 #define USB_MIDI_SERIAL
 #define COUNTERS_ENABLED false
@@ -90,13 +91,6 @@ struct keypair_t {
 };
 
 const keypair_t INVALID_KEYPAIR = keypair_t(INVALID_PIN, INVALID_KEY);
-
-/*const keypair_t keypairs {
-  keypair_t(A)
-}*/
-
-// put function declarations here:
-int myFunction(int, int);
 
 void errorln(const char *s) { Serial.println(s); }
 

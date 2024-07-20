@@ -163,9 +163,41 @@ struct compensation_config_t {
   }
 };
 
+struct velocity_t {
+    uint16_t val;
+
+    velocity_t(uint16_t val): val(val) {}
+
+    uint16_t midi2() {
+        return this->val;
+    }
+
+    uint8_t midi() {
+        return this->val >> 8;
+    }
+};
+
+// responsible for doing velocity mapping 
 struct curve_t {
-    float floor;
-    float ceiling;
+    float floor = 0;
+    float ceiling = 0;
+
+    float exponent = 1;
+    float scale;
+
+    curve_t() {
+        // we want the floor vel
+        // to result in a velocity of 0,
+        // and a ceiling val to result in
+        // uint16_t::MAX
+
+        //float uncorrected = pow(this->ceiling - this->floor, this->exponent);
+
+        //return 65535.0;
+    }
+
+    velocity_t map(float raw_velocity) {
+    }
 };
 
 struct curves_config_t {

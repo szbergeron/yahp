@@ -10,6 +10,8 @@
 #include <math.h>
 #include <cstdint>
 #include "config.cpp"
+#include "calibrate.cpp"
+#include "sample.cpp"
 
 #define USB_MIDI_SERIAL
 #define COUNTERS_ENABLED false
@@ -94,16 +96,6 @@ const keypair_t INVALID_KEYPAIR = keypair_t(INVALID_PIN, INVALID_KEY);
 
 void errorln(const char *s) { Serial.println(s); }
 
-struct sample_t {
-  uint16_t value;
-  uint32_t time; // NOTE: this can WRAP! Only use this in comparison with "near"
-                 // samples
-
-  sample_t(uint16_t value, uint32_t time) : value(value), time(time) {}
-
-  // "big" value since smaller ones are more active
-  sample_t() : value(1000), time(0) {}
-};
 
 struct sample_result_t {
   sample_t sample;
@@ -111,56 +103,6 @@ struct sample_result_t {
 
   sample_result_t(keypair_t key, sample_t sample) : sample(sample), key(key) {}
   sample_result_t() : sample(), key() {}
-};
-
-const int SAMPLE_BUFFER_LENGTH = 256; // this should capture a dx for even the softest notes
-struct sample_buf_t {
-  sample_t buffer[SAMPLE_BUFFER_LENGTH];
-
-  // begin points at the newest sample,
-  // and (begin + 1) % SAMPLE_BUFFER_LENGTH is the next newest
-  uint32_t begin = 0;
-  uint32_t size = 0;
-
-  void add_sample(sample_t sample) {
-    /*this->begin =
-        (this->begin + SAMPLE_BUFFER_LENGTH - 1) % SAMPLE_BUFFER_LENGTH;*/
-    this->begin++;
-    this->begin %= SAMPLE_BUFFER_LENGTH;
-
-    this->buffer[this->begin] = sample;
-    if (this->size < SAMPLE_BUFFER_LENGTH) {
-      this->size++;
-    }
-  }
-
-  // if n is greater than buffer length,
-  // then the oldest still held sample is returned
-  // if no samples exist, the sample will be "zero"
-  sample_t read_nth_oldest(uint32_t n) {
-    //Serial.println("N is: " + String(n));
-    // clamp n
-    if (n > SAMPLE_BUFFER_LENGTH) [[unlikely]] {
-      n = SAMPLE_BUFFER_LENGTH;
-    }
-
-    auto res = sample_t{0, 0};
-    if (this->size == 0) {
-      // keep default
-    } else {
-      auto start = this->begin;
-      auto with_room = start + SAMPLE_BUFFER_LENGTH;
-      auto offsetted = with_room - n;
-      auto idx = offsetted % SAMPLE_BUFFER_LENGTH;
-      //Serial.println("Returns idx: " + String(idx));
-      res = this->buffer[idx];
-      //res = this->buffer[(n + this->begin) % SAMPLE_BUFFER_LENGTH];
-    }
-
-    //print_value(res.value);
-    
-    return res;
-  }
 };
 
 enum sample_priority_t {

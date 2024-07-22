@@ -1,18 +1,12 @@
+#ifndef YAHP_SAMPLER
+#define YAHP_SAMPLER
+
+#include "ADC.h"
+#include "ADC_Module.h"
 #include "Array.h"
+#include "config.cpp"
 #include "core_pins.h"
 #include "utils.cpp"
-
-const int KEYS_PER_BOARD = 16;
-const int NUM_BOARDS = 8;
-const int SAMPLE_BUFFER_LENGTH =
-    256; // this should capture a dx for even the softest notes
-const int SAMPLE_BATCH_TYPICAL_SIZE =
-    64; // the maximum typical number of samples within a batch.
-        // this can be tuned based on how many notes are
-        // going to be due per batch in a reasonable worst-case
-        // scenario (requiring an allocation if it exceeds this)
-const uint32_t MAX_STALENESS_MICROS = 500;
-const uint32_t MIN_STALENESS_MICROS = 200;
 
 struct sample_t {
 
@@ -33,11 +27,15 @@ struct sample_buf_t {
   uint32_t begin = 0;
   uint32_t size = 0;
 
+  uint32_t unackd;
+
   void add_sample(sample_t sample) {
     /*this->begin =
         (this->begin + SAMPLE_BUFFER_LENGTH - 1) % SAMPLE_BUFFER_LENGTH;*/
     this->begin++;
     this->begin %= SAMPLE_BUFFER_LENGTH;
+
+    this->unackd += 1;
 
     this->buffer[this->begin] = sample;
     if (this->size < SAMPLE_BUFFER_LENGTH) {
@@ -79,8 +77,12 @@ struct sample_buf_t {
 struct sensor_t;
 
 struct sample_request_t {
-  sensor_t &sensor;
+  sensor_t *sensor;
   uint8_t pin;
+
+  sample_request_t() : sensor(nullptr), pin(0) {}
+
+  sample_request_t(uint8_t pin, sensor_t *sensor) : sensor(sensor), pin(pin) {}
 };
 
 struct sensor_t {
@@ -100,10 +102,12 @@ struct sensor_t {
     CRITICAL,
   };
 
+  uint32_t sensor_id;
+
+  sample_buf_t buf;
   poll_priority_e priority = poll_priority_e::RELAXED;
 
-  // sensor_mode_e sensor_mode;
-  sample_buf_t buf;
+  uint8_t pin;
 
   // key should be immediately sampled
   bool due_now() {
@@ -134,14 +138,19 @@ struct sensor_t {
   }
 
   sample_request_t make_sample_request() {
-    // TODO
+    return sample_request_t(this->pin, this);
+  }
+
+  sensor_t(uint8_t pin, uint32_t sensor_id) : sensor_id(sensor_id), pin(pin) {
+    //
   }
 };
 
 struct board_t {
   Array<sensor_t, KEYS_PER_BOARD> keys;
+  uint8_t board_num;
 
-  void sample_round() {
+  void do_round() {
     // check if we even need to sample anything
     bool some_due = false;
 
@@ -168,16 +177,54 @@ struct board_t {
         requests.push_back(r);
       }
     }
-
-    //
   }
-};
 
-struct sampler_t {
-  Array<board_t, NUM_BOARDS> boards;
+  void sample_all(Array<sample_request_t, KEYS_PER_BOARD> &requests) {
+    Array<sample_request_t, KEYS_PER_BOARD> for_a;
+    Array<sample_request_t, KEYS_PER_BOARD> for_b;
+    Array<sample_request_t, KEYS_PER_BOARD> for_both;
+  }
 
-  void sample_round() {
-    for (auto &board : this->boards) {
+  board_t(uint8_t board_num, Array<sensorspec_t, KEYS_PER_BOARD> &keysc)
+      : board_num(board_num) {
+    for (auto &keyc : keysc) {
+      sensor_t sensor(keyc.pin_num, keyc.sensor_id);
+      this->keys.push_back(sensor);
     }
   }
 };
+
+struct adc_info_t {
+  bool allowed_pins[PIN_COUNT];
+  ADC_Module *adcm;
+
+  adc_info_t(int idx, ADC *adc)
+      : allowed_pins{}, adcm(idx == 0 ? adc->adc0 : adc->adc1) {}
+
+  adc_info_t() : allowed_pins{}, adcm(nullptr) {}
+};
+
+struct adcs_info_t {
+  adc_info_t adc[2];
+
+  adcs_info_t(ADC *adcp) : adc{adc_info_t(0, adcp), adc_info_t(1, adcp)} {}
+
+  adcs_info_t() : adc{} {}
+};
+
+struct sampler_t {
+  ADC adc;
+  Array<board_t, NUM_BOARDS> boards;
+
+  sampler_t(ADC adc_, samplerspec_t &spec) : adc(adc_) {
+    for (auto &boardc : this->boards) {
+        board_t b(boardc);
+        this->boards.push_back(b);
+    }
+  }
+
+  void sample_round() {
+  }
+};
+
+#endif

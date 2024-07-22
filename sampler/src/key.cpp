@@ -1,4 +1,9 @@
+#ifndef YAHP_KEY
+#define YAHP_KEY
+
 #include "sampler2.cpp"
+#include "utils.cpp"
+//#include <coroutine>
 
 uint16_t DEFAULT_BOTTOM = 270;
 uint16_t DEFAULT_UP = 460;
@@ -38,7 +43,7 @@ struct key_calibration_t {
   key_calibration_t() {}
 };
 
-struct key_t {
+struct kbd_key_t {
   enum class key_state_e {
     // the "laziest" state, no interaction
     // is known to be active,
@@ -95,6 +100,9 @@ struct key_t {
   // and queue up event dispatches
   //
   void process_samples() {
+  }
+
+  void process_samples_inner() {
     auto latest = this->sensor->buf.read_nth_oldest(0);
     bool note_played = false;
     bool damper_on = false;
@@ -251,7 +259,7 @@ struct key_t {
     uint32_t maxs = 0;
 
     for (int i = 0; i < SAMPLE_BUFFER_LENGTH; i++) {
-      auto sample = this->buf.read_nth_oldest(i);
+      auto sample = this->sensor->buf.read_nth_oldest(i);
 
       if (sample.value > this->calibration.letoff_th_on) {
         // don't include it -- either noise or too old
@@ -318,3 +326,5 @@ struct key_t {
     this->nstate = note_state_e::NOTE_ON;
   }
 };
+
+#endif

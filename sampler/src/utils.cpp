@@ -19,7 +19,7 @@ static inline void digitalWriteFaster(uint_fast8_t val, uint_fast8_t pin) {
     *(digital_pin_to_info_PGM[(pin)].reg + 1 - adder) = digital_pin_to_info_PGM[(pin)].mask;
 }
 
-void errorln(const char *s) { Serial.println(s); }
+static inline void errorln(const char *s) { Serial.println(s); }
 
 template<typename T>
 inline T min(T a, T b) {
@@ -39,7 +39,7 @@ inline T max(T a, T b) {
     }
 }
 
-void print_bounds(int value, int upper, int lower) {
+static void print_bounds(int value, int upper, int lower) {
   Serial.print(value);
   value = value > upper ? upper : value;
   value = value - lower;
@@ -65,7 +65,7 @@ void print_bounds(int value, int upper, int lower) {
   Serial.print("\r\n");
 }
 
-void print_value(int value) {
+static void print_value(int value) {
   //int min = 200;
   //int max = 500;
   int lower = 210;
@@ -74,7 +74,7 @@ void print_value(int value) {
 
 }
 
-void gap(uint32_t a, uint32_t b, String m) {
+static void gap(uint32_t a, uint32_t b, String m) {
     Serial.println("Gap: " + m + " | " + String(b - a));
 }
 

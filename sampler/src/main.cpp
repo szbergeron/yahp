@@ -33,45 +33,6 @@ void wait(uint32_t prior, uint32_t later) {
     }
 }
 
-void print_bounds(int value, int upper, int lower) {
-  Serial.print(value);
-  value = value > upper ? upper : value;
-  value = value - lower;
-  
-  int res = 1;
-
-  Serial.print("\xE2\x96\x88");
-  
-  for(int i = 0; i < value; i++) {
-    if (i % res == 0) {
-      Serial.print("\xE2\x96\x88");
-    }
-  }
-  
-  for(int i = value; i < upper; i++) {
-    if( i % res == 0) {
-      //Serial.print(" ");
-    }
-  }
-
-  Serial.print("\xE2\x96\x88");
-  
-  Serial.print("\r\n");
-}
-
-void print_value(int value) {
-  //int min = 200;
-  //int max = 500;
-  int lower = 210;
-  int upper = 550;
-  print_bounds(value, upper, lower);
-
-}
-
-void gap(uint32_t a, uint32_t b, String m) {
-    Serial.println("Gap: " + m + " | " + String(b - a));
-}
-
 
 struct piano_key_t;
 

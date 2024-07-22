@@ -31,7 +31,8 @@ struct sample_request_t {
   sample_request_t(uint16_t key_id, uint8_t board, uint8_t selection)
       : key_id(key_id), pin(selection), board(board) {}
 
-  sample_request_t(): board(INVALID_BOARD), pin(INVALID_PIN), key_id(INVALID_KEY) {}
+  sample_request_t()
+      : board(INVALID_BOARD), pin(INVALID_PIN), key_id(INVALID_KEY) {}
 };
 
 struct sample_t {
@@ -50,7 +51,8 @@ struct sample_result_t {
   sample_request_t for_request;
   sample_t val;
 
-  sample_result_t(sample_request_t sample_of, sample_t sample): for_request(sample_of), val(sample) {}
+  sample_result_t(sample_request_t sample_of, sample_t sample)
+      : for_request(sample_of), val(sample) {}
 };
 
 struct sample_buf_t {
@@ -152,12 +154,22 @@ struct sampler {
 
     for (auto &r : batch) {
       if (r.board != current_board) {
-        // execute on the current available batch
-        this->set_board(current_board);
+        // only do (potentially lengthy)
+        // setup if something on this board is due
+        if (!board_batch.empty()) {
+          // execute on the current available batch
+          this->set_board(current_board);
 
-        this->sample_in_board(result, board_batch);
+          this->sample_in_board(result, board_batch);
+        }
+
+        board_batch.clear();
+
+        current_board = r.board;
       }
     }
+
+    return result;
   }
 
   void set_board(uint8_t board) {
@@ -254,7 +266,7 @@ struct sampler {
                        const Array<sample_request_t, 16> &in) {
     auto ordered_reads = this->order_reads(in);
 
-    //Array<sample_result_t, KEYS_PER_BOARD> results;
+    // Array<sample_result_t, KEYS_PER_BOARD> results;
 
     for (auto pair : ordered_reads) {
       if (pair.pin1.pin == INVALID_PIN || pair.pin2.pin == INVALID_PIN)

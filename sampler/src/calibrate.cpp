@@ -1,24 +1,25 @@
 #include "utils.cpp"
 #include "config.cpp"
 
+#include <Array.h>
+
 #include "core_pins.h"
 #include "elapsedMillis.h"
 #include "pins_arduino.h"
 #include "usb_serial.h"
 #include "wiring.h"
-#include <Array.h>
 #include <cstddef>
 #include <cstdint>
 
 #ifndef YAHP_CALIBRATE
 #define YAHP_CALIBRATE
 
-uint8_t pins[KEYS_PER_BOARD] = {A0, A1, A2,  A3,  A4,  A5,  A6,  A7,
+const uint8_t pins[KEYS_PER_BOARD] = {A0, A1, A2,  A3,  A4,  A5,  A6,  A7,
                                 A8, A9, A10, A11, A12, A13, A16, A17};
 
-uint8_t FIRST_MIDI_NOTE = 21;
+const uint8_t FIRST_MIDI_NOTE = 21;
 
-String format_note(uint8_t index) {
+static String format_note(uint8_t index) {
   String base;
 
   auto midi_notenum = index - FIRST_MIDI_NOTE;
@@ -72,7 +73,7 @@ String format_note(uint8_t index) {
   return base;
 }
 
-bool confirm(String message, bool default_val) {
+static bool confirm(String message, bool default_val) {
   while (true) {
     if (default_val) {
       Serial.print(message + " (Y/n): ");
@@ -93,7 +94,7 @@ bool confirm(String message, bool default_val) {
   }
 }
 
-Array<uint8_t, 16> detect_boards() {
+static Array<uint8_t, 16> detect_boards() {
   Serial.println("Getting board info");
   const size_t LINE_LEN = 256;
   uint8_t linebuf[LINE_LEN];
@@ -132,7 +133,7 @@ sequential = confirm("Are they numbered sequentially starting from zero?", true)
   return boards;
 }
 
-Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &boards) {
+static Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &boards) {
 
   for (size_t i = 0; i < KEYS_PER_BOARD; i++) {
     pinMode(pins[i], INPUT_PULLDOWN);
@@ -194,7 +195,7 @@ Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &boards) {
   Serial.println();
 }
 
-key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num,
+static key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num,
                         uint8_t midi_num, uint32_t sensor_id) {
   set_board(board_num);
   analogReadResolution(10);
@@ -248,7 +249,7 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num,
   }
 }
 
-keyboardspec_t
+static keyboardspec_t
 detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
               Array<uint8_t, 16> &boards) {
   Array<boardspec_t, NUM_BOARDS> bspecs;
@@ -295,7 +296,7 @@ detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
   return k;
 }
 
-keyboardspec_t run_calibration() {
+static keyboardspec_t run_calibration() {
   Serial.println("Beginning calibration");
 
   auto boards = detect_boards();

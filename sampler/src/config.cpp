@@ -1,14 +1,20 @@
+#include "ArduinoJson/Variant/JsonVariant.hpp"
 #include "utils.cpp"
 
 #include "Array.h"
+
 #include <ArduinoJson.h>
-//#include <ArduinoJson.hpp>
+#include <ArduinoJson.hpp>
+
+#include "ArduinoJson/Array/JsonArray.hpp"
 #include "ArduinoJson/Document/JsonDocument.hpp"
 #include "ArduinoJson/Json/JsonDeserializer.hpp"
+#include "ArduinoJson/Object/JsonObject.hpp"
 #include "FS.h"
 #include "avr/pgmspace.h"
 #include <SD.h>
 #include <cstddef>
+#include <optional>
 
 #ifndef YAHP_CONFIG
 #define YAHP_CONFIG
@@ -34,7 +40,8 @@ struct key_spec_t {
   uint32_t sensor_id = 0;
 
   // the value observed by the sensor when...
-  float max_val = 0; // the hammer is at its highest position when playing a PP note
+  float max_val =
+      0; // the hammer is at its highest position when playing a PP note
   float min_val = 0; // the hammer is at rest
 
   // each of these is normalized to a 0-1
@@ -47,11 +54,27 @@ struct key_spec_t {
   uint8_t midi_note = 0;
   uint8_t midi_channel = 0;
 
+  key_spec_t() {}
+
   key_spec_t(uint32_t sid, float min_val, float max_val, uint8_t midi_note)
       : sensor_id(sid), max_val(max_val), min_val(min_val),
         midi_note(midi_note) {}
 
-  key_spec_t() {}
+  key_spec_t(JsonObject j)
+      : sensor_id(j["sensor_id"]), max_val(j["max_val"]), min_val(j["min_val"]),
+        midi_note(j["midi_note"]), midi_channel(j["midi_channel"]) {}
+
+  JsonDocument to_json() {
+    JsonDocument d;
+
+    d["sensor_id"] = this->sensor_id;
+    d["max_val"] = this->max_val;
+    d["min_val"] = this->min_val;
+    d["midi_note"] = this->midi_note;
+    d["midi_channel"] = this->midi_channel;
+
+    return d;
+  }
 };
 
 struct global_key_config_t {
@@ -104,6 +127,27 @@ struct global_key_config_t {
   float bezier_p4y = 1;
 
   global_key_config_t() {}
+
+  global_key_config_t(JsonObject j)
+      : active(j["active"]), letoff(j["letoff"]), strike(j["strike"]),
+        repetition(j["repetition"]), damper_up(j["damper_up"]),
+        damper_down(j["damper_down"]), max_velocity(j["max_velocity"]),
+        min_velocity(j["min_velocity"]) {}
+
+  JsonDocument to_json() {
+    JsonDocument d;
+
+    d["active"] = this->active;
+    d["letoff"] = this->letoff;
+    d["strike"] = this->strike;
+    d["repetition"] = this->repetition;
+    d["damper_up"] = this->damper_up;
+    d["damper_down"] = this->damper_down;
+    d["max_velocity"] = this->max_velocity;
+    d["min_velocity"] = this->min_velocity;
+
+    return d;
+  }
 };
 
 struct pedal_spec_t {
@@ -113,6 +157,19 @@ struct pedal_spec_t {
   float min_val;
 
   pedal_spec_t() {}
+
+  pedal_spec_t(JsonObject j)
+      : sensor_id(j["sensor_id"]), max_val(j["max_val"]),
+        min_val(j["min_val"]) {}
+
+  JsonDocument to_json() {
+    JsonDocument d;
+
+    d["sensor_id"] = this->sensor_id;
+    d["max_val"] = this->max_val;
+
+    return d;
+  }
 };
 
 struct sensorspec_t {
@@ -120,30 +177,94 @@ struct sensorspec_t {
 
   uint32_t sensor_id = 0;
 
+  sensorspec_t() {}
+
   sensorspec_t(uint32_t sensor_id, uint8_t pin_num)
       : pin_num(pin_num), sensor_id(sensor_id) {}
 
-  sensorspec_t() {}
+  sensorspec_t(JsonObject j)
+      : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]) {}
+
+  JsonDocument to_json() {
+    JsonDocument d;
+
+    d["sensor_id"] = this->sensor_id;
+    d["pin_num"] = this->pin_num;
+
+    return d;
+  }
 };
 
 struct boardspec_t {
   Array<sensorspec_t, KEYS_PER_BOARD> sensors;
   uint8_t board_num = 0;
 
+  boardspec_t() {}
+
   boardspec_t(uint8_t board_num, Array<sensorspec_t, KEYS_PER_BOARD> sensors)
       : sensors(sensors), board_num(board_num) {}
 
-  boardspec_t() {}
+  boardspec_t(JsonObject j) : board_num(j["board_num"]) {
+    auto ja = j["sensors"].as<JsonArray>();
+
+    for (auto ent : ja) {
+      this->sensors.push_back(sensorspec_t(ent.as<JsonObject>()));
+    }
+  }
+
+  JsonDocument to_json() {
+    JsonDocument d;
+
+    d["board_num"] = this->board_num;
+
+    JsonDocument di;
+
+    auto a = di.to<JsonArray>();
+
+    for (auto &sensor : this->sensors) {
+      a.add(sensor.to_json());
+    }
+
+    d["sensors"] = di;
+
+    return d;
+  }
 };
 
 struct samplerspec_t {
   Array<boardspec_t, NUM_BOARDS> boards;
 
   samplerspec_t(Array<boardspec_t, NUM_BOARDS> boards) : boards(boards) {}
+
+  samplerspec_t() {}
+
+  samplerspec_t(JsonObject j) {
+    auto ja = j["boards"].as<JsonArray>();
+
+    for (auto ent : ja) {
+      boardspec_t b(ent.as<JsonObject>());
+      this->boards.push_back(b);
+    }
+  }
+
+  JsonDocument to_json() {
+    JsonDocument di;
+
+    auto a = di.to<JsonArray>();
+
+    for (auto &board : this->boards) {
+      a.add(board.to_json());
+    }
+
+    JsonDocument d;
+    d["boards"] = di;
+
+    return d;
+  }
 };
 
-const size_t JSON_FILE_MAX_LENGTH = 128000;
-EXTMEM char JSON_FILE[JSON_FILE_MAX_LENGTH];
+static const size_t JSON_FILE_MAX_LENGTH = 128000;
+static EXTMEM char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
 struct keyboardspec_t {
   samplerspec_t sampler;
@@ -153,35 +274,82 @@ struct keyboardspec_t {
 
   global_key_config_t gbl;
 
+  keyboardspec_t() {}
+
   keyboardspec_t(samplerspec_t sampler,
                  Array<key_spec_t, KEY_COUNT_TYPICAL> keys,
                  Array<pedal_spec_t, PEDAL_COUNT_TYPICAL> pedals)
       : sampler(sampler), keys(keys), pedals(pedals) {}
+
+  keyboardspec_t(JsonObject d)
+      : sampler(d["sampler"].as<JsonObject>()), gbl(d["global"].as<JsonObject>()) {
+    JsonArray kja = d["keys"].as<JsonArray>();
+    JsonArray pja = d["pedals"].as<JsonArray>();
+
+    for (auto ent : kja) {
+      key_spec_t ks(ent.as<JsonObject>());
+      this->keys.push_back(ks);
+    }
+
+    for (auto ent : pja) {
+      pedal_spec_t ps(ent.as<JsonObject>());
+      this->pedals.push_back(ps);
+    }
+  }
+
+  JsonDocument to_json() {
+    JsonDocument d;
+
+    JsonDocument kj;
+    JsonDocument pj;
+
+    JsonArray kja = kj.to<JsonArray>();
+    JsonArray pja = pj.to<JsonArray>();
+
+    for (auto &key : this->keys) {
+      auto jd = key.to_json();
+      kja.add(jd);
+    }
+
+    for (auto &pedal : this->pedals) {
+      auto jd = pedal.to_json();
+      pja.add(jd);
+    }
+
+    d["keys"] = kja;
+    d["pedals"] = pja;
+    d["sampler"] = this->sampler.to_json();
+    d["global"] = this->gbl.to_json();
+
+    return d;
+  }
 };
 
 // I KNOW this is horrible and has memory safety issues.
 // I just am not dealing with that right here, right now
-keyboardspec_t* from_sd() {
-    if (!SD.begin(BUILTIN_SDCARD)) {
-        Serial.println("Couldn't init SD");
-        return nullptr;
-    }
+static keyboardspec_t *yahp_from_sd() {
+  if (!SD.begin(BUILTIN_SDCARD)) {
+    Serial.println("Couldn't init SD");
+    return nullptr;
+  }
 
-    if (!SD.exists("config.json")) {
-        Serial.println("No config on SD");
-        return nullptr;
-    }
+  if (!SD.exists("config.json")) {
+    Serial.println("No config on SD");
+    return nullptr;
+  }
 
-    auto f = SD.open("config.json", FILE_READ);
+  auto f = SD.open("config.json", FILE_READ);
 
-    size_t file_size = 0;
+  size_t file_size = 0;
 
-    file_size = f.readBytes(JSON_FILE, JSON_FILE_MAX_LENGTH);
+  file_size = f.readBytes(JSON_FILE, JSON_FILE_MAX_LENGTH);
 
-    JSON_FILE[file_size] = 0; // null term
+  JSON_FILE[file_size] = 0; // null term
 
-    JsonDocument doc;
-    //deserializeJson(doc, JSON_FILE);
+  JsonDocument doc;
+  deserializeJson(doc, JSON_FILE);
+
+  keyboardspec_t kbds(doc.as<JsonObject>());
 }
 
 #endif

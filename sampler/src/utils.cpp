@@ -19,6 +19,16 @@ static inline void digitalWriteFaster(uint_fast8_t val, uint_fast8_t pin) {
     *(digital_pin_to_info_PGM[(pin)].reg + 1 - adder) = digital_pin_to_info_PGM[(pin)].mask;
 }
 
+static inline void set_board(uint_fast8_t val) {
+    uint8_t starting_pin = 5;
+
+    // I am a dumbass and put the bits backwards in the board layout
+    for(uint8_t bit = 0; bit < 8; bit++) {
+        uint8_t bitval = (val >> (7 - bit)) & 0x1;
+        digitalWriteFaster(bitval, starting_pin + bit);
+    }
+}
+
 static inline void errorln(const char *s) { Serial.println(s); }
 
 template<typename T>

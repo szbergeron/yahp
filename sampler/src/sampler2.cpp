@@ -1,12 +1,13 @@
-#ifndef YAHP_SAMPLER
-#define YAHP_SAMPLER
+#include "utils.cpp"
+#include "config.cpp"
 
 #include "ADC.h"
 #include "ADC_Module.h"
 #include "Array.h"
-#include "config.cpp"
 #include "core_pins.h"
-#include "utils.cpp"
+
+#ifndef YAHP_SAMPLER
+#define YAHP_SAMPLER
 
 struct sample_t {
 
@@ -19,8 +20,8 @@ struct sample_t {
   sample_t() : value(0), time(0) {}
 };
 
-struct sample_buf_t {
-  sample_t buffer[SAMPLE_BUFFER_LENGTH];
+template <uint32_t BUFSIZE = SAMPLE_BUFFER_LENGTH> struct sample_buf_t {
+  sample_t buffer[BUFSIZE];
 
   // begin points at the newest sample,
   // and (begin + 1) % SAMPLE_BUFFER_LENGTH is the next newest
@@ -33,14 +34,20 @@ struct sample_buf_t {
     /*this->begin =
         (this->begin + SAMPLE_BUFFER_LENGTH - 1) % SAMPLE_BUFFER_LENGTH;*/
     this->begin++;
-    this->begin %= SAMPLE_BUFFER_LENGTH;
+    this->begin %= BUFSIZE;
 
     this->unackd += 1;
 
     this->buffer[this->begin] = sample;
-    if (this->size < SAMPLE_BUFFER_LENGTH) {
+    if (this->size < BUFSIZE) {
       this->size++;
     }
+  }
+
+  void clear() {
+    this->begin = 0;
+    this->size = 0;
+    this->unackd = 0;
   }
 
   // if n is greater than buffer length,
@@ -49,8 +56,8 @@ struct sample_buf_t {
   sample_t read_nth_oldest(uint32_t n) {
     // Serial.println("N is: " + String(n));
     //  clamp n
-    if (n > SAMPLE_BUFFER_LENGTH) [[unlikely]] {
-      n = SAMPLE_BUFFER_LENGTH;
+    if (n > BUFSIZE) [[unlikely]] {
+      n = BUFSIZE;
     }
 
     auto res = sample_t{0, 0};
@@ -58,9 +65,9 @@ struct sample_buf_t {
       // keep default
     } else {
       auto start = this->begin;
-      auto with_room = start + SAMPLE_BUFFER_LENGTH;
+      auto with_room = start + BUFSIZE;
       auto offsetted = with_room - n;
-      auto idx = offsetted % SAMPLE_BUFFER_LENGTH;
+      auto idx = offsetted % BUFSIZE;
       // Serial.println("Returns idx: " + String(idx));
       res = this->buffer[idx];
       // res = this->buffer[(n + this->begin) % SAMPLE_BUFFER_LENGTH];
@@ -102,12 +109,12 @@ struct sensor_t {
     CRITICAL,
   };
 
-  uint32_t sensor_id;
+  uint32_t sensor_id = 0;
 
-  sample_buf_t buf;
+  sample_buf_t<SAMPLE_BUFFER_LENGTH> buf;
   poll_priority_e priority = poll_priority_e::RELAXED;
 
-  uint8_t pin;
+  uint8_t pin = 0;
 
   // key should be immediately sampled
   bool due_now() {
@@ -144,11 +151,32 @@ struct sensor_t {
   sensor_t(uint8_t pin, uint32_t sensor_id) : sensor_id(sensor_id), pin(pin) {
     //
   }
+
+  sensor_t() {}
+};
+
+struct adc_info_t {
+  bool allowed_pins[PIN_COUNT];
+  ADC_Module *adcm;
+
+  adc_info_t(int idx, ADC *adc)
+      : allowed_pins{}, adcm(idx == 0 ? adc->adc0 : adc->adc1) {}
+
+  adc_info_t() : allowed_pins{}, adcm(nullptr) {}
+};
+
+struct adcs_info_t {
+  adc_info_t adc[2];
+
+  adcs_info_t(ADC *adcp) : adc{adc_info_t(0, adcp), adc_info_t(1, adcp)} {}
+
+  adcs_info_t() : adc{} {}
 };
 
 struct board_t {
   Array<sensor_t, KEYS_PER_BOARD> keys;
   uint8_t board_num;
+  adcs_info_t adcs;
 
   void do_round() {
     // check if we even need to sample anything
@@ -185,46 +213,34 @@ struct board_t {
     Array<sample_request_t, KEYS_PER_BOARD> for_both;
   }
 
-  board_t(uint8_t board_num, Array<sensorspec_t, KEYS_PER_BOARD> &keysc)
-      : board_num(board_num) {
-    for (auto &keyc : keysc) {
+  board_t(boardspec_t &bspec, adcs_info_t &adcs_info)
+      : board_num(bspec.board_num), adcs(adcs_info) {
+    for (auto &keyc : bspec.sensors) {
       sensor_t sensor(keyc.pin_num, keyc.sensor_id);
       this->keys.push_back(sensor);
     }
   }
-};
 
-struct adc_info_t {
-  bool allowed_pins[PIN_COUNT];
-  ADC_Module *adcm;
-
-  adc_info_t(int idx, ADC *adc)
-      : allowed_pins{}, adcm(idx == 0 ? adc->adc0 : adc->adc1) {}
-
-  adc_info_t() : allowed_pins{}, adcm(nullptr) {}
-};
-
-struct adcs_info_t {
-  adc_info_t adc[2];
-
-  adcs_info_t(ADC *adcp) : adc{adc_info_t(0, adcp), adc_info_t(1, adcp)} {}
-
-  adcs_info_t() : adc{} {}
+  board_t(): board_num(0), adcs() {}
 };
 
 struct sampler_t {
-  ADC adc;
+  ADC *adc = nullptr;
   Array<board_t, NUM_BOARDS> boards;
 
-  sampler_t(ADC adc_, samplerspec_t &spec) : adc(adc_) {
-    for (auto &boardc : this->boards) {
-        board_t b(boardc);
-        this->boards.push_back(b);
+  sampler_t(ADC adc_, samplerspec_t &spec) : adc(new ADC(adc_)) {
+    for (auto boardc : spec.boards) {
+      adcs_info_t info(this->adc);
+      board_t b(boardc, info);
+      this->boards.push_back(b);
     }
   }
 
-  void sample_round() {
-  }
+  ~sampler_t() { delete this->adc; }
+
+  sampler_t() {}
+
+  void sample_round() {}
 };
 
 #endif

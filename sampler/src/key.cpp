@@ -8,23 +8,17 @@
 #ifndef YAHP_KEY
 #define YAHP_KEY
 
-uint16_t DEFAULT_BOTTOM = 270;
-uint16_t DEFAULT_UP = 460;
-uint16_t DEFAULT_GAP = DEFAULT_UP - DEFAULT_BOTTOM;
+static const uint16_t DEFAULT_BOTTOM = 270;
+static const uint16_t DEFAULT_UP = 460;
+static const uint16_t DEFAULT_GAP = DEFAULT_UP - DEFAULT_BOTTOM;
 
 struct key_calibration_t {
+  key_spec_t spec;
+
   // all of these are normalized to
   // ideally fall within a 0-1 range,
   // though values outside of that
   // range are also completely allowed
-  float active;
-  float letoff;
-  float strike;
-  float repetition;
-  float damper_up;
-  float damper_down;
-
-  key_spec_t spec;
 
   inline float normalize_sample(uint16_t sample) {
     float as_f = sample;
@@ -36,42 +30,45 @@ struct key_calibration_t {
     return normalized;
   }
 
-  inline void verify_states() {
-    if (this->active > this->damper_down) {
-      Serial.printf("active %f is greater than dd %f\n", this->active,
-                    this->damper_down);
+  //
+
+  inline void verify_states(global_key_config_t &gbl) {
+    if (gbl.active > gbl.damper_down) {
+      Serial.printf("active %f is greater than dd %f\n", gbl.active,
+                    gbl.damper_down);
     }
 
-    if (this->damper_down > this->damper_up) {
-      Serial.printf("dd %f is greater than du %f\n", this->active,
-                    this->damper_down);
+    if (gbl.damper_down > gbl.damper_up) {
+      Serial.printf("dd %f is greater than du %f\n", gbl.active,
+                    gbl.damper_down);
     }
 
-    if (this->damper_up > this->strike) {
-      Serial.printf("du %f is greater than strike %f\n", this->active,
-                    this->damper_down);
+    if (gbl.damper_up > gbl.strike) {
+      Serial.printf("du %f is greater than strike %f\n", gbl.active,
+                    gbl.damper_down);
     }
 
-    if (this->active > this->repetition) {
-      Serial.printf("active %f is greater than repetition %f\n", this->active,
-                    this->damper_down);
+    if (gbl.active > gbl.repetition) {
+      Serial.printf("active %f is greater than repetition %f\n", gbl.active,
+                    gbl.damper_down);
     }
 
-    if (this->repetition > this->letoff) {
-      Serial.printf("repetition %f is greater than letoff %f\n", this->active,
-                    this->damper_down);
+    if (gbl.repetition > gbl.letoff) {
+      Serial.printf("repetition %f is greater than letoff %f\n", gbl.active,
+                    gbl.damper_down);
     }
 
-    if (this->letoff > this->strike) {
-      Serial.printf("letoff %f is greater than strike %f\n", this->active,
-                    this->damper_down);
+    if (gbl.letoff > gbl.strike) {
+      Serial.printf("letoff %f is greater than strike %f\n", gbl.active,
+                    gbl.damper_down);
     }
   }
 
-  key_calibration_t(key_spec_t &spec, global_key_config_t &gbl)
-      : spec(spec), active(gbl.active), letoff(gbl.letoff), strike(gbl.strike),
-        repetition(gbl.repetition), damper_up(gbl.damper_up),
-        damper_down(gbl.damper_down) {}
+  key_calibration_t(key_spec_t &spec) : spec(spec) {}
+
+  key_calibration_t() {
+      //errorln("default constructed a calibration");
+  }
 };
 
 struct kbd_key_t {
@@ -114,51 +111,69 @@ struct kbd_key_t {
         : key_state(ks), damper_state(ns) {}
   };
 
+  kbd_key_t(sensor_t *sensor, key_calibration_t calibration,
+            global_key_config_t global_key_config)
+      : sensor(sensor), calibration(calibration),
+        global_key_config(global_key_config) {}
+
+  kbd_key_t() {
+    // errorln("default constructed a kbd_key_t");
+  }
+
+  sample_buf_t<128> strike_buf;
+
   key_state_e kstate = key_state_e::KEY_RESTING;
   damper_state_e dstate = damper_state_e::DAMPER_DOWN;
   sensor_t *sensor = nullptr;
   key_calibration_t calibration;
-  global_key_config_t *global_key_config;
+  global_key_config_t global_key_config;
 
-  sample_buf_t<1024> strike_buf;
 
   inline new_state_t new_state_given(sample_t sample) {
     auto &c = this->calibration;
+    auto &g = this->global_key_config;
 
     auto normalized = c.normalize_sample(sample.value);
 
-    if (normalized <= c.active) {
+    if (normalized <= g.active) {
       return new_state_t(key_state_e::KEY_RESTING, damper_state_e::DAMPER_DOWN);
     }
 
     damper_state_e ds;
     key_state_e ks;
 
-    if (normalized > c.damper_up) {
+    if (normalized > g.damper_up) {
       ds = damper_state_e::DAMPER_UP;
-    } else if (normalized < c.damper_down) {
+    } else if (normalized < g.damper_down) {
       ds = damper_state_e::DAMPER_DOWN;
     } else {
       ds = this->dstate;
     }
 
-    if (normalized > c.active && normalized <= c.repetition) {
+    if (normalized > g.active && normalized <= g.repetition) {
       ks = key_state_e::KEY_READY;
-    } else if (normalized > c.repetition && normalized <= c.letoff) {
+    } else if (normalized > g.repetition && normalized <= g.letoff) {
       // keep it as it is, either coming up (READY),
       // or recovering from a strike (STRIKING)
       ks = this->kstate;
-    } else if (normalized > c.letoff && normalized <= c.strike) {
+    } else if (normalized > g.letoff && normalized <= g.strike) {
       ks = key_state_e::KEY_CRITICAL;
-    } else if (normalized > c.strike) {
+    } else if (normalized > g.strike) {
       ks = key_state_e::KEY_STRIKING;
     }
 
     return new_state_t(ks, ds);
   }
 
-  void process_samples() {
-    if (this->sensor->buf.unackd == 0) {
+  // this is absolutely inlined
+  // because it needs to be in the hot idle loop
+  // and get out of the way _fast_
+  [[gnu::always_inline]] [[gnu::pure]] inline bool process_needed() {
+    return this->sensor->buf.unackd != 0;
+  }
+
+  inline void process_samples() {
+    if (!this->process_needed()) [[likely]] {
       return; // no new info
     }
 
@@ -281,20 +296,20 @@ struct kbd_key_t {
   // returns a velocity clamped to [0, 1]
   // for use in midi
   float map_velocity(float v) {
-    auto &c = *this->global_key_config;
+    auto &c = this->global_key_config;
     // first, normalize the value
     float range = c.max_velocity - c.min_velocity;
 
     float n = (v - c.min_velocity) / range;
     n = (n < 0) ? -n : n;
 
-    float p1x = c.bezier_p1x;
+    // float p1x = c.bezier_p1x;
     float p1y = c.bezier_p1y;
-    float p2x = c.bezier_p2x;
+    // float p2x = c.bezier_p2x;
     float p2y = c.bezier_p2y;
-    float p3x = c.bezier_p3x;
+    // float p3x = c.bezier_p3x;
     float p3y = c.bezier_p3y;
-    float p4x = c.bezier_p4x;
+    // float p4x = c.bezier_p4x;
     float p4y = c.bezier_p4y;
 
     float y[4] = {p1y, p2y, p3y, p4y};

@@ -1,14 +1,12 @@
-//#include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
+// #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
 #include "WProgram.h"
 #include "utils.cpp"
 
 #include "Array.h"
 
 #include <ArduinoJson.hpp>
-#include "ArduinoJson/Variant/JsonVariantConst.hpp"
 #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
-
-
+#include "ArduinoJson/Variant/JsonVariantConst.hpp"
 
 #include "FS.h"
 #include "avr/pgmspace.h"
@@ -26,7 +24,7 @@ using namespace ArduinoJson;
 const int KEYS_PER_BOARD = 16;
 const int NUM_BOARDS = 8;
 const int SAMPLE_BUFFER_LENGTH =
-    256; // this should capture a dx for even the softest notes
+    16; // this should capture a dx for even the softest notes
 const int SAMPLE_BATCH_TYPICAL_SIZE =
     64; // the maximum typical number of samples within a batch.
         // this can be tuned based on how many notes are
@@ -34,8 +32,8 @@ const int SAMPLE_BATCH_TYPICAL_SIZE =
         // scenario (requiring an allocation if it exceeds this)
 const uint32_t MAX_STALENESS_MICROS = 500;
 const uint32_t MIN_STALENESS_MICROS = 200;
-const uint32_t KEY_COUNT_TYPICAL = 97;
-const uint32_t PEDAL_COUNT_TYPICAL = 4;
+const uint32_t KEY_COUNT_MAX = 97;
+const uint32_t PEDAL_COUNT_MAX = 4;
 const uint32_t CONTRIB_WINDOW = 2;
 
 const int PIN_COUNT = 42;
@@ -44,16 +42,20 @@ struct key_spec_t {
   uint32_t sensor_id = 0;
 
   // the value observed by the sensor when...
-  float max_val =
-      0; // the hammer is at its highest position when playing a PP note
-  float min_val = 0; // the hammer is at rest
+  //
+  // the hammer is at its highest position when playing a PP note
+  float max_val = 0;
+  // the hammer is at rest
+  float min_val = 0;
 
+#ifdef USE_CONTRIB_WINDOW
   // each of these is normalized to a 0-1
   // position of both `self` and the neighboring
   // sensors
   // some non-linear factor? is it needed?
   Array<float, CONTRIB_WINDOW> factor_left;
   Array<float, CONTRIB_WINDOW> factor_right;
+#endif
 
   uint8_t midi_note = 0;
   uint8_t midi_channel = 0;
@@ -117,8 +119,8 @@ struct global_key_config_t {
   float damper_up = 0.4;
   float damper_down = 0.3;
 
-  float max_velocity;
-  float min_velocity;
+  float max_velocity = 0;
+  float min_velocity = 0;
 
   // just...flat?
   float bezier_p1x = 0;
@@ -268,21 +270,21 @@ struct samplerspec_t {
 };
 
 static const size_t JSON_FILE_MAX_LENGTH = 128000;
-static EXTMEM char JSON_FILE[JSON_FILE_MAX_LENGTH];
+static DMAMEM char JSON_FILE[JSON_FILE_MAX_LENGTH];
+//static uint8_t *JSON_FILE = nullptr;
 
 struct keyboardspec_t {
   samplerspec_t sampler;
 
-  Array<key_spec_t, KEY_COUNT_TYPICAL> keys;
-  Array<pedal_spec_t, PEDAL_COUNT_TYPICAL> pedals;
+  Array<key_spec_t, KEY_COUNT_MAX> keys;
+  Array<pedal_spec_t, PEDAL_COUNT_MAX> pedals;
 
   global_key_config_t gbl;
 
   keyboardspec_t() {}
 
-  keyboardspec_t(samplerspec_t sampler,
-                 Array<key_spec_t, KEY_COUNT_TYPICAL> keys,
-                 Array<pedal_spec_t, PEDAL_COUNT_TYPICAL> pedals)
+  keyboardspec_t(samplerspec_t sampler, Array<key_spec_t, KEY_COUNT_MAX> keys,
+                 Array<pedal_spec_t, PEDAL_COUNT_MAX> pedals)
       : sampler(sampler), keys(keys), pedals(pedals) {}
 
   keyboardspec_t(JsonObject d)
@@ -347,6 +349,10 @@ static keyboardspec_t *yahp_from_sd() {
 
   size_t file_size = 0;
 
+  /*if (JSON_FILE == nullptr) {
+    JSON_FILE = malloc(JSON_FILE_MAX_LENGTH);
+  }*/
+
   file_size = f.readBytes(JSON_FILE, JSON_FILE_MAX_LENGTH);
 
   JSON_FILE[file_size] = 0; // null term
@@ -356,24 +362,25 @@ static keyboardspec_t *yahp_from_sd() {
   JsonDocument doc;
   deserializeJson(doc, JSON_FILE);
 
-  keyboardspec_t kbds(doc.as<JsonObject>());
-  auto m = extmem_malloc(sizeof(keyboardspec_t));
+  keyboardspec_t *kbds = new keyboardspec_t(doc.as<JsonObject>());
 
-  auto p = new (m) keyboardspec_t(std::move(kbds));
+  // auto p = new (SPEC_ALLOC) keyboardspec_t(std::move(kbds));
 
-  return p;
+  return kbds;
 }
-
 
 static void yahp_to_sd(keyboardspec_t &kbs) {
   auto d = kbs.to_json();
 
-  auto len = serializeJsonPretty(d, JSON_FILE,
-                      JSON_FILE_MAX_LENGTH);
+  /*if (JSON_FILE == nullptr) {
+    JSON_FILE = malloc(JSON_FILE_MAX_LENGTH);
+  }*/
+
+  auto len = serializeJsonPretty(d, JSON_FILE, JSON_FILE_MAX_LENGTH);
 
   if (!SD.begin(BUILTIN_SDCARD)) {
     Serial.println("Couldn't init SD");
-    return nullptr;
+    return;
   }
 
   auto f = SD.open("config.json", FILE_WRITE_BEGIN);

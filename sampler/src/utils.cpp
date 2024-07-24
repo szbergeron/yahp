@@ -6,6 +6,18 @@
 #include <cstdint>
 #include <math.h>
 
+[[gnu::noinline]]
+[[gnu::cold]]
+[[gnu::unused]]
+static void eloop(String s) {
+    while(true) {
+        Serial.println("A failure mode was entered due to an unrecoverable circumstance:");
+        Serial.println(s);
+        delay(10000);
+    }
+}
+
+
 
 // I'm a bastard and a curse upon this world, but
 // if you're gonna mock me for this
@@ -29,9 +41,13 @@ static inline void set_board(uint_fast8_t val) {
     }
 }
 
-static inline void errorln(const char *s) { Serial.println(s); }
+[[gnu::noinline]]
+[[gnu::cold]]
+[[gnu::unused]]
+static void errorln(const char *s) { Serial.println(s); }
 
 template<typename T>
+[[gnu::unused]]
 inline T min(T a, T b) {
     if (a < b) {
         return a;
@@ -41,6 +57,7 @@ inline T min(T a, T b) {
 }
 
 template<typename T>
+[[gnu::unused]]
 inline T max(T a, T b) {
     if (a > b) {
         return a;
@@ -49,6 +66,7 @@ inline T max(T a, T b) {
     }
 }
 
+[[gnu::unused]]
 static void print_bounds(int value, int upper, int lower) {
   Serial.print(value);
   value = value > upper ? upper : value;
@@ -75,6 +93,7 @@ static void print_bounds(int value, int upper, int lower) {
   Serial.print("\r\n");
 }
 
+[[gnu::unused]]
 static void print_value(int value) {
   //int min = 200;
   //int max = 500;
@@ -84,6 +103,7 @@ static void print_value(int value) {
 
 }
 
+[[gnu::unused]]
 static void gap(uint32_t a, uint32_t b, String m) {
     Serial.println("Gap: " + m + " | " + String(b - a));
 }

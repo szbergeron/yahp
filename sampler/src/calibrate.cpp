@@ -1,5 +1,5 @@
-#include "utils.cpp"
 #include "config.cpp"
+#include "utils.cpp"
 
 #include <Array.h>
 
@@ -15,7 +15,7 @@
 #define YAHP_CALIBRATE
 
 const uint8_t pins[KEYS_PER_BOARD] = {A0, A1, A2,  A3,  A4,  A5,  A6,  A7,
-                                A8, A9, A10, A11, A12, A13, A16, A17};
+                                      A8, A9, A10, A11, A12, A13, A16, A17};
 
 const uint8_t FIRST_MIDI_NOTE = 21;
 
@@ -74,30 +74,45 @@ static String format_note(uint8_t index) {
 }
 
 static bool confirm(String message, bool default_val) {
+  Serial.clear();
   while (true) {
+
+    // auto s = Serial.readStringUntil('\n');
+    int s = Serial.read();
+    if (s == 'n' || s == 'N') {
+      return false;
+    } else if (s == 'y' || s == 'Y') {
+      return true;
+    } else if (s == '\n') {
+      return default_val;
+    } else if (s == -1) {
+      delay(3);
+      continue;
+    } else {
+      Serial.println("Unrecognized value: " + s);
+    }
+
     if (default_val) {
       Serial.print(message + " (Y/n): ");
     } else {
       Serial.print(message + " (y/N): ");
     }
-
-    auto s = Serial.readString();
-    if (s == "n" || s == "N") {
-      return false;
-    } else if (s == "y" || s == "Y") {
-      return true;
-    } else if (s == "") {
-      return default_val;
-    } else {
-      Serial.println("Unrecognized value: " + s);
-    }
   }
 }
 
+/*static int32_t prompt_int(String message, int32_t min, int32_t max,
+                                   int32_t default_val) {
+  int32_t val = default_val;
+  while (true) {
+    // Serial.parseInt()
+  }
+}*/
+
 static Array<uint8_t, 16> detect_boards() {
   Serial.println("Getting board info");
-  const size_t LINE_LEN = 256;
-  uint8_t linebuf[LINE_LEN];
+  // const size_t LINE_LEN = 256;
+  // uint8_t linebuf[LINE_LEN];
+
   // first, detect which boards are present
   // do this by checking if we can pull up/down
   // the voltage on the lines, or if
@@ -111,7 +126,8 @@ static Array<uint8_t, 16> detect_boards() {
 
   bool sequential = false;
 
-sequential = confirm("Are they numbered sequentially starting from zero?", true);
+  sequential =
+      confirm("Are they numbered sequentially starting from zero?", true);
 
   Serial.println();
 
@@ -133,7 +149,8 @@ sequential = confirm("Are they numbered sequentially starting from zero?", true)
   return boards;
 }
 
-static Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &boards) {
+static Array<Array<bool, KEYS_PER_BOARD>, 16>
+detect_keys(Array<uint8_t, 16> &boards) {
 
   for (size_t i = 0; i < KEYS_PER_BOARD; i++) {
     pinMode(pins[i], INPUT_PULLDOWN);
@@ -193,10 +210,12 @@ static Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &bo
   }
 
   Serial.println();
+
+  return info;
 }
 
 static key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num,
-                        uint8_t midi_num, uint32_t sensor_id) {
+                                        uint8_t midi_num, uint32_t sensor_id) {
   set_board(board_num);
   analogReadResolution(10);
   analogReadAveraging(2);
@@ -243,9 +262,9 @@ static key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num,
   bool retry = confirm("Do you want to retry?", false);
 
   if (retry) {
-      return detect_range(board_num, sensor_num, midi_num, sensor_id);
+    return detect_range(board_num, sensor_num, midi_num, sensor_id);
   } else {
-      return key_spec_t(sensor_id, min_val, max_val, midi_num);
+    return key_spec_t(sensor_id, min_val, max_val, midi_num);
   }
 }
 
@@ -264,7 +283,6 @@ detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
     uint8_t bnum = boards[b];
 
     Array<sensorspec_t, KEYS_PER_BOARD> sspecs;
-
 
     for (size_t s = 0; s < keys.size(); s++) {
       bool kp = board_keys[s];
@@ -306,6 +324,8 @@ static keyboardspec_t run_calibration() {
   Serial.println("Calibrating minimum and maximum values");
 
   auto specs = detect_ranges(keys, boards);
+
+  return specs;
 }
 
 #endif

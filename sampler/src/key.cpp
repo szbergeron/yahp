@@ -1,5 +1,5 @@
-#include "utils.cpp"
 #include "sampler2.cpp"
+#include "utils.cpp"
 
 #include "Array.h"
 #include "usb_midi.h"
@@ -67,6 +67,11 @@ struct key_calibration_t {
                     this->damper_down);
     }
   }
+
+  key_calibration_t(key_spec_t &spec, global_key_config_t &gbl)
+      : spec(spec), active(gbl.active), letoff(gbl.letoff), strike(gbl.strike),
+        repetition(gbl.repetition), damper_up(gbl.damper_up),
+        damper_down(gbl.damper_down) {}
 };
 
 struct kbd_key_t {
@@ -109,9 +114,9 @@ struct kbd_key_t {
         : key_state(ks), damper_state(ns) {}
   };
 
-  key_state_e kstate;
-  damper_state_e dstate;
-  sensor_t *sensor;
+  key_state_e kstate = key_state_e::KEY_RESTING;
+  damper_state_e dstate = damper_state_e::DAMPER_DOWN;
+  sensor_t *sensor = nullptr;
   key_calibration_t calibration;
   global_key_config_t *global_key_config;
 
@@ -204,7 +209,7 @@ struct kbd_key_t {
   }
 
   void lower_damper() {
-    //Serial.println("Damp note " + this->format_note());
+    // Serial.println("Damp note " + this->format_note());
 #if defined(ENABLE_MIDI)
     usbMIDI.sendNoteOff(70 + this->key_number, 127, 0);
     // usbMIDI.send_now();
@@ -247,7 +252,7 @@ struct kbd_key_t {
     float b_1 = SS_xy / SS_xx;
     // float b_0 = m_y - b_1 * m_x;
 
-    return b_1 * -10000;
+    return b_1;
   }
 
   void process_strike() {

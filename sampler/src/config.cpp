@@ -1,20 +1,24 @@
-#include "ArduinoJson/Variant/JsonVariant.hpp"
+//#include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
+#include "WProgram.h"
 #include "utils.cpp"
 
 #include "Array.h"
 
-#include <ArduinoJson.h>
 #include <ArduinoJson.hpp>
+#include "ArduinoJson/Variant/JsonVariantConst.hpp"
+#include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
 
-#include "ArduinoJson/Array/JsonArray.hpp"
-#include "ArduinoJson/Document/JsonDocument.hpp"
-#include "ArduinoJson/Json/JsonDeserializer.hpp"
-#include "ArduinoJson/Object/JsonObject.hpp"
+
+
 #include "FS.h"
 #include "avr/pgmspace.h"
+#include "wiring.h"
 #include <SD.h>
 #include <cstddef>
 #include <optional>
+#include <utility>
+
+using namespace ArduinoJson;
 
 #ifndef YAHP_CONFIG
 #define YAHP_CONFIG
@@ -282,7 +286,8 @@ struct keyboardspec_t {
       : sampler(sampler), keys(keys), pedals(pedals) {}
 
   keyboardspec_t(JsonObject d)
-      : sampler(d["sampler"].as<JsonObject>()), gbl(d["global"].as<JsonObject>()) {
+      : sampler(d["sampler"].as<JsonObject>()),
+        gbl(d["global"].as<JsonObject>()) {
     JsonArray kja = d["keys"].as<JsonArray>();
     JsonArray pja = d["pedals"].as<JsonArray>();
 
@@ -346,10 +351,35 @@ static keyboardspec_t *yahp_from_sd() {
 
   JSON_FILE[file_size] = 0; // null term
 
+  f.close();
+
   JsonDocument doc;
   deserializeJson(doc, JSON_FILE);
 
   keyboardspec_t kbds(doc.as<JsonObject>());
+  auto m = extmem_malloc(sizeof(keyboardspec_t));
+
+  auto p = new (m) keyboardspec_t(std::move(kbds));
+
+  return p;
+}
+
+
+static void yahp_to_sd(keyboardspec_t &kbs) {
+  auto d = kbs.to_json();
+
+  auto len = serializeJsonPretty(d, JSON_FILE,
+                      JSON_FILE_MAX_LENGTH);
+
+  if (!SD.begin(BUILTIN_SDCARD)) {
+    Serial.println("Couldn't init SD");
+    return nullptr;
+  }
+
+  auto f = SD.open("config.json", FILE_WRITE_BEGIN);
+
+  f.write(JSON_FILE, len);
+  f.close();
 }
 
 #endif

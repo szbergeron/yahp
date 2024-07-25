@@ -1,4 +1,8 @@
+#include "pins_arduino.h"
+#define ENABLE_MIDI
+
 #include "ADC.h"
+#include "core_pins.h"
 #include "usb_midi.h"
 
 #include "calibrate.cpp"
@@ -26,7 +30,6 @@
   stats_t() {}
 };*/
 
-
 struct idler_t {
   /*stats_t key_stats;
   stats_t pedal_stats;
@@ -39,26 +42,29 @@ struct idler_t {
     // and I'll do the translation from cycles later
     auto window = window_ns / 1000;
     auto start = micros();
-    if (run_all) [[unlikely]] {
-      // ignore budget \:)
-    }
+
+    // Serial.println("Stepping idle");
 
     for (kbd_key_t &k : this->keyboard->keys) {
       if (k.process_needed()) {
+        auto note = format_note(k.calibration.spec.midi_note);
+        // Serial.println("Processing samples for " + note);
         k.process_samples();
       }
 
-      if (micros() - start > window && !run_all) {
-        break;
+      if (!run_all) {
+        if (micros() - start > window) {
+          break;
+        }
       }
     }
 
-    if (run_all) [[unlikely]] {
-      usbMIDI.send_now();
+    if (run_all) {
+      //usbMIDI.send_now();
     }
   }
 
-  idler_t(keyboard_t* keyboard): keyboard(keyboard) {}
+  idler_t(keyboard_t *keyboard) : keyboard(keyboard) {}
 };
 
 /*char (*__kaboom)[sizeof(sampler_t)] = 1;
@@ -67,20 +73,17 @@ void kaboom_print( void )
     printf( "%d", __kaboom )
 }*/
 
-
-//static sampler_t SAMPLER;
-//static keyboard_t KEYBOARD;
+// static sampler_t SAMPLER;
+// static keyboard_t KEYBOARD;
 static uint8_t IDLER_BUF[sizeof(idler_t)];
-static idler_t* IDLER = nullptr;
-//union IDLER_U { uint8_t ignore, idler_t idler } IDLER;
+static idler_t *IDLER = nullptr;
+// union IDLER_U { uint8_t ignore, idler_t idler } IDLER;
 
 static uint8_t SAMPLER_BUF[sizeof(sampler_t)];
-static sampler_t* SAMPLER = nullptr;
+static sampler_t *SAMPLER = nullptr;
 
 static uint8_t KEYBOARD_BUF[sizeof(keyboard_t)];
-static keyboard_t* KEYBOARD = nullptr;
-
-//static idler_t IDLER;
+static keyboard_t *KEYBOARD = nullptr;
 
 // call this whenever there is a "pause" in sampling, or when waiting on a
 // conversion, and pass the expected amount of time to idle for
@@ -99,18 +102,35 @@ __attribute__((always_inline)) static inline void step_idle(uint32_t window_ns,
   IDLER->step_idle(window_ns, run_all);
 }
 
+void configure_adc() {
+  for (int i = 0; i < KEYS_PER_BOARD; i++) {
+    auto pin = pins[i];
+    pinMode(pin, INPUT);
+  }
+
+  analogReadAveraging(1);
+  analogReadResolution(10);
+
+  for (int i = 0; i < 8; i++) {
+    pinMode(i + 5, OUTPUT);
+  }
+}
+
 // static ADC adc();
 
 void setup() {
-  Serial.println("Begin setup");
-
-  Serial.setTimeout(100000);
-  pinMode(LED_BUILTIN, OUTPUT);
-  for (int i = 0; i < 10; i++) {
+  for (int i = 0; i < 3; i++) {
     delay(700);
     digitalToggle(LED_BUILTIN);
     Serial.println("Waiting...");
   }
+
+  configure_adc();
+
+  Serial.println("Begin setup");
+
+  //Serial.setTimeout(100000);
+  pinMode(LED_BUILTIN, OUTPUT);
 
   if (!SD.begin(BUILTIN_SDCARD)) {
     Serial.println("Couldn't init SD");
@@ -120,6 +140,7 @@ void setup() {
   // delay(5000);
   Serial.println("Setting up...");
   auto spec = yahp_from_sd();
+  // spec = nullptr;
 
   Serial.println("Tried load from sd");
 
@@ -157,10 +178,27 @@ void setup() {
 
   Serial.println("Setup complete, entering loop...");
 
+  pinMode(LED_BUILTIN, OUTPUT);
+
+  configure_adc();
+
   // now, initialize all the runtime values to match CFG
+  //Serial.begin(0);
+  //usbMIDI.begin();
 }
 
+uint32_t lm = 0;
+bool state = false;
+
 void loop() {
+  auto now = millis();
+  ;
+  if (now - lm > 700) {
+    lm = now;
+    state = !state;
+    digitalWrite(LED_BUILTIN, state);
+  }
+
   // Serial.println("Reached loop");
   SAMPLER->sample_round();
   // Serial.println("Finished round");

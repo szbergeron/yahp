@@ -18,6 +18,7 @@ using namespace ArduinoJson;
 #ifndef YAHP_CONFIG
 #define YAHP_CONFIG
 
+
 const int KEYS_PER_BOARD = 16;
 const int NUM_BOARDS = 8;
 const int SAMPLE_BUFFER_LENGTH =
@@ -32,6 +33,9 @@ const uint32_t MIN_STALENESS_MICROS = 200;
 const uint32_t KEY_COUNT_MAX = 97;
 const uint32_t PEDAL_COUNT_MAX = 4;
 const uint32_t CONTRIB_WINDOW = 2;
+
+const uint8_t pins[KEYS_PER_BOARD] = {A3,  A2,  A1, A0, A7,  A6,  A5,  A4,
+                                      A11, A10, A9, A8, A17, A16, A13, A12};
 
 const int PIN_COUNT = 42;
 
@@ -84,12 +88,12 @@ struct global_key_config_t {
   // values between 0 and 1, with 1 being the max value,
   // and 0 being the min value according to the key_spec
 
-  float active = 0.1;
+  float active = 0.05;
 
   // the point where the jack moves off
   // of the knuckle and the hammer
   // begins flying freely
-  float letoff = 0.85;
+  float letoff = 0.75;
 
   // the point where the hammer
   // makes contact with the "string".
@@ -99,11 +103,11 @@ struct global_key_config_t {
   // softer than the calibration strike.
   // this aims to be where the hammer
   // first makes contact with the striker rail
-  float strike = 0.95;
+  float strike = 0.85;
 
   // the point where the jack comes back
   // onto the knuckle, and the key can be played again
-  float repetition = 0.75;
+  float repetition = 0.35;
 
   // damper_up is the point where
   // the damper should lift off of the string
@@ -113,10 +117,10 @@ struct global_key_config_t {
   // around the dampers _and_ this prevents
   // a storm of note_on/note_off being sent
   // because of sensor noise
-  float damper_up = 0.4;
-  float damper_down = 0.3;
+  float damper_up = 0.2;
+  float damper_down = 0.1;
 
-  float max_velocity = 0;
+  float max_velocity = 0.29;
   float min_velocity = 0;
 
   // just...flat?
@@ -265,9 +269,6 @@ struct samplerspec_t {
     return d;
   }
 };
-
-static const size_t JSON_FILE_MAX_LENGTH = 28000;
-static char JSON_FILE[JSON_FILE_MAX_LENGTH];
 //static uint8_t *JSON_FILE = nullptr;
 
 struct keyboardspec_t {
@@ -329,9 +330,17 @@ struct keyboardspec_t {
   }
 };
 
+static uint8_t KBSPEC_BUF[sizeof(keyboardspec_t)];
+static keyboardspec_t* KBSPEC = nullptr;
+
+
 // I KNOW this is horrible and has memory safety issues.
 // I just am not dealing with that right here, right now
+// NOTE: when this is called, it will destroy any other keyboardspec
+// that it has returned prior! it only maintains one backing buffer
 static keyboardspec_t *yahp_from_sd() {
+    const size_t JSON_FILE_MAX_LENGTH = 32000;
+    char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
   if (!SD.exists("config.json")) {
     Serial.println("No config on SD");
@@ -342,10 +351,6 @@ static keyboardspec_t *yahp_from_sd() {
 
   size_t file_size = 0;
 
-  /*if (JSON_FILE == nullptr) {
-    JSON_FILE = malloc(JSON_FILE_MAX_LENGTH);
-  }*/
-
   file_size = f.readBytes(JSON_FILE, JSON_FILE_MAX_LENGTH);
 
   JSON_FILE[file_size] = 0; // null term
@@ -355,7 +360,12 @@ static keyboardspec_t *yahp_from_sd() {
   JsonDocument doc;
   deserializeJson(doc, JSON_FILE);
 
-  keyboardspec_t *kbds = new keyboardspec_t(doc.as<JsonObject>());
+  if(KBSPEC != nullptr) {
+      KBSPEC->~keyboardspec_t();
+  }
+
+  keyboardspec_t *kbds = new(KBSPEC_BUF) keyboardspec_t(doc.as<JsonObject>());
+  KBSPEC = kbds;
 
   // auto p = new (SPEC_ALLOC) keyboardspec_t(std::move(kbds));
 

@@ -108,14 +108,104 @@ static void print_value(int value, bool term) {
   //int min = 200;
   //int max = 500;
   int lower = 0;
-  int upper = 1000;
+  int upper = 300;
+  //
   print_bounds(value, upper, lower, term);
 
 }
 
 [[gnu::unused]]
+static void print_normalized(float v) {
+  //int min = 200;
+  //int max = 500;
+  int upper = 120;
+  int lower = 0;
+
+  float fvalue = v;
+  Serial.print(fvalue);
+  int value = fvalue * upper;
+  value = value > upper ? upper : value;
+  value = value - lower;
+  
+  int res = 1;
+
+  Serial.print("\xE2\x96\x88");
+  
+  for(int i = 0; i < value; i++) {
+    if (i % res == 0) {
+      Serial.print("\xE2\x96\x88");
+    }
+  }
+  
+  for(int i = value; i < upper; i++) {
+    if( i % res == 0) {
+      //Serial.print(" ");
+    }
+  }
+
+  Serial.print("\xE2\x96\x88");
+}
+
+[[gnu::unused]]
 static void gap(uint32_t a, uint32_t b, String m) {
     Serial.println("Gap: " + m + " | " + String(b - a));
+}
+
+
+const uint8_t FIRST_MIDI_NOTE = 21;
+
+String format_note(uint8_t index) {
+  String base;
+
+  auto midi_notenum = index - FIRST_MIDI_NOTE;
+
+  auto midi_octave = midi_notenum / 12;
+  auto midi_note = midi_notenum % 12;
+
+  switch (midi_note) {
+  case 0:
+    base.append("A");
+    break;
+  case 1:
+    base.append("A#/Bb");
+    break;
+  case 2:
+    base.append("B");
+    break;
+  case 3:
+    base.append("C");
+    break;
+  case 4:
+    base.append("C#/Db");
+    break;
+  case 5:
+    base.append("D");
+    break;
+  case 6:
+    base.append("D#/Eb");
+    break;
+  case 7:
+    base.append("E");
+    break;
+  case 8:
+    base.append("F");
+    break;
+  case 9:
+    base.append("F#/Gb");
+    break;
+  case 10:
+    base.append("G");
+    break;
+  case 11:
+    base.append("G#/Ab");
+    break;
+  }
+
+  base.append(" ");
+
+  base.append(midi_octave);
+
+  return base;
 }
 
 

@@ -30,8 +30,9 @@ struct sample_t {
 
   uint16_t value;
   uint32_t time;
-  //uint16_t time_l;
-  //uint16_t time_h; // NOTE: this can WRAP! Only use this in comparison with "near" samples
+  // uint16_t time_l;
+  // uint16_t time_h; // NOTE: this can WRAP! Only use this in comparison with
+  // "near" samples
 
   /*uint32_t time() {
       //uint32_t h = this->time_h;
@@ -43,7 +44,6 @@ struct sample_t {
 
   sample_t() : value(0), time(0) {}
 };
-
 
 template <uint32_t BUFSIZE = SAMPLE_BUFFER_LENGTH> struct sample_buf_t {
   sample_t buffer[BUFSIZE];
@@ -187,7 +187,7 @@ struct sensor_t {
   }
 
   sensor_t() {
-      //errorln("sensor_t was default constructed");
+    // errorln("sensor_t was default constructed");
   }
 };
 
@@ -196,15 +196,23 @@ struct adc_info_t {
   ADC_Module *adcm;
 
   adc_info_t(int idx, ADC *adc)
-      : allowed_pins{}, adcm(idx == 0 ? adc->adc0 : adc->adc1) {}
+      : allowed_pins{}, adcm(idx == 0 ? adc->adc0 : adc->adc1) {
+    for (int i = 0; i < KEYS_PER_BOARD; i++) {
+      auto pin = pins[i];
+      auto allowed = adcm->checkPin(pin);
+      this->allowed_pins[pin] = allowed;
+    }
+  }
 
   adc_info_t() : allowed_pins{}, adcm(nullptr) {}
 };
 
 struct adcs_info_t {
+  ADC *adcp;
   adc_info_t adc[2];
 
-  adcs_info_t(ADC *adcp) : adc{adc_info_t(0, adcp), adc_info_t(1, adcp)} {}
+  adcs_info_t(ADC *adcp)
+      : adcp(adcp), adc{adc_info_t(0, adcp), adc_info_t(1, adcp)} {}
 
   adcs_info_t() : adc{} {}
 };
@@ -227,6 +235,10 @@ struct board_t {
     if (!some_due) {
       // move on asap
       return;
+    } else {
+      // set board now so we have time for sample
+      set_board(this->board_num);
+      delayMicroseconds(1);
     }
 
     // start setting the pins _now_
@@ -272,7 +284,7 @@ struct board_t {
     sample_request_t a;
     sample_request_t b;
 
-    while (true) {
+    while (!for_a.empty() || !for_b.empty() || !for_both.empty()) {
       if (!for_a.empty()) {
         a = for_a.back();
         for_a.pop_back();
@@ -295,6 +307,8 @@ struct board_t {
       auto &adc_a = this->adcs.adc[0].adcm;
       auto &adc_b = this->adcs.adc[1].adcm;
 
+#undef FASTREAD
+#ifdef FASTREAD
       if (a.is_real()) {
 #ifdef YAHP_DEBUG
         bool v = adc_a->checkPin(a.pin);
@@ -359,6 +373,43 @@ struct board_t {
         sample_t s(v_b, ts_b);
         a.sensor->add_sample(s);
       }
+#else
+      //Serial.println("Adding round");
+      if (a.is_real() && b.is_real()) {
+        ts_a = micros();
+        ts_b = micros();
+
+        auto r = this->adcs.adcp->analogSynchronizedRead(a.pin, b.pin);
+        auto v_a = r.result_adc0;
+        auto v_b = r.result_adc1;
+        /*adc_a->startSingleRead(a.pin);
+        adc_b->startSingleRead(b.pin);
+
+        step_idle(CONVERSION_TIME_NS, false);
+
+        auto v_a = adc_a->readSingle();
+        auto v_b = adc_b->readSingle();*/
+        sample_t sa(v_a, ts_a);
+        sample_t sb(v_b, ts_b);
+
+        a.sensor->add_sample(sa);
+        b.sensor->add_sample(sb);
+
+      } else if (a.is_real()) {
+        ts_a = micros();
+        auto v_a = adc_a->analogRead(a.pin);
+        sample_t sa(v_a, ts_a);
+
+        a.sensor->add_sample(sa);
+      } else if (b.is_real()) {
+        ts_b = micros();
+        auto v_b = adc_b->analogRead(b.pin);
+        sample_t sb(v_b, ts_b);
+
+        b.sensor->add_sample(sb);
+      }
+
+#endif
     }
   }
 

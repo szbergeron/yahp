@@ -1,6 +1,8 @@
 #include "avr/pgmspace.h"
 #include "config.cpp"
+#include "key.cpp"
 #include "pins_arduino.h"
+#include "usb_serial.h"
 #include "utils.cpp"
 
 #include <Array.h>
@@ -12,66 +14,6 @@
 
 #ifndef YAHP_CALIBRATE
 #define YAHP_CALIBRATE
-
-const uint8_t pins[KEYS_PER_BOARD] = {A0, A1, A2,  A3,  A4,  A5,  A6,  A7,
-                                      A8, A9, A10, A11, A12, A13, A16, A17};
-
-const uint8_t FIRST_MIDI_NOTE = 21;
-
-String format_note(uint8_t index) {
-  String base;
-
-  auto midi_notenum = index - FIRST_MIDI_NOTE;
-
-  auto midi_octave = midi_notenum / 12;
-  auto midi_note = midi_notenum % 12;
-
-  switch (midi_note) {
-  case 0:
-    base.append("A");
-    break;
-  case 1:
-    base.append("A#/Bb");
-    break;
-  case 2:
-    base.append("B");
-    break;
-  case 3:
-    base.append("C");
-    break;
-  case 4:
-    base.append("C#/Db");
-    break;
-  case 5:
-    base.append("D");
-    break;
-  case 6:
-    base.append("D#/Eb");
-    break;
-  case 7:
-    base.append("E");
-    break;
-  case 8:
-    base.append("F");
-    break;
-  case 9:
-    base.append("F#/Gb");
-    break;
-  case 10:
-    base.append("G");
-    break;
-  case 11:
-    base.append("G#/Ab");
-    break;
-  }
-
-  base.append(" ");
-
-  base.append(midi_octave);
-
-  return base;
-}
-
 void blinkblink() {
   for (int i = 0; i < 3; i++) {
     digitalWrite(LED_BUILTIN, 1);
@@ -79,6 +21,13 @@ void blinkblink() {
     digitalWrite(LED_BUILTIN, 0);
     delay(250);
   }
+}
+
+bool newline_waiting() {
+  bool val = Serial.read() == '\r' || Serial.read() == '\n';
+  Serial.clear();
+
+  return val;
 }
 
 String read_line() {
@@ -101,7 +50,8 @@ String read_line() {
       delay(1);
       continue;
     } else if (v == '\n' || v == '\r') {
-      Serial.println("got it!");
+      Serial.println();
+      // Serial.println("\r\ngot it!");
       break;
     } else {
       bytes[len++] = v;
@@ -172,6 +122,47 @@ int32_t prompt_int(String message, int32_t min, int32_t max,
         continue;
       }
       ret = (ret * 10) + i;
+    }
+
+    // Serial.printf("Got %d\n\r", ret);
+    return ret;
+  }
+}
+
+float prompt_float(String message, float min, float max, float default_val) {
+  int32_t val = default_val;
+  while (true) {
+    Serial.print(message + " [" + default_val + "]: ");
+
+    auto line = read_line();
+    // toInt is absolutely stupid and broken, so I guess I'm doing it myself
+    float ret = 0;
+    if (line.c_str()[0] == 0) {
+      Serial.printf("Selected default of %f\n\r", default_val);
+      return default_val;
+    }
+
+    bool before_point = true;
+    int dp = 1;
+    for (char c : line) {
+      if (c == '.') {
+        before_point = false;
+        continue;
+      }
+      if (before_point) {
+        int i = c - '0';
+        if (i < 0 || i >= 10) {
+          Serial.printf(
+              "Please type a _floating point number_ between %f and %f\n\r",
+              min, max);
+          continue;
+        }
+        ret = (ret * 10) + i;
+      } else {
+        float i = c - '0';
+        ret = ret + (i / pow(10, dp));
+        dp++;
+      }
     }
 
     // Serial.printf("Got %d\n\r", ret);
@@ -280,6 +271,10 @@ Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &boards) {
     Serial.print("]");
   }
 
+  for (size_t b = 0; b < info.size(); b++) {
+    Serial.printf("b# %d has %d\r\n", b, info[b].size());
+  }
+
   Serial.println();
 
   return info;
@@ -306,6 +301,13 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
   int32_t left_hyst = 50;
   Serial.println();
 
+  bool should_configure = confirm("Configure this key?", true);
+
+  if (!should_configure) {
+    Serial.println("Nulling key...");
+    return key_spec_t(sensor_id, -1, -1, midi_num);
+  }
+
   // wait for the value to rise
   while (true) {
     delayMicroseconds(50);
@@ -317,6 +319,9 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
       break;
     }
   }
+
+  Serial.print("\r                                                             "
+               "                             \n\n\r");
 
   // now, sample AFAP for 1 second and try to get the highest bound
   auto start = elapsedMillis();
@@ -333,6 +338,19 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
     if (val < min_sense) {
       min_sense = val;
     }
+
+    auto delta_min = myabs(rest_val - min_sense);
+    auto delta_max = myabs(rest_val - max_sense);
+    auto delta_val = myabs(val - rest_val);
+
+    // do an early exit when we know a strike and settle has occurred
+    // are we close to the resting point again?
+    if (delta_min > 150 && delta_min < 50 && delta_val < 50) {
+      break;
+    }
+    if (delta_max > 150 && delta_min < 50 && delta_val < 50) {
+      break;
+    }
   }
 
   auto delta_min = myabs(rest_val - min_sense);
@@ -348,6 +366,11 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
     min = max_sense;
     max = min_sense;
   }
+
+  Serial.println("Min:");
+  print_value(min, true);
+  Serial.println("Max:");
+  print_value(max, true);
 
   Serial.printf("Got minimum value of %d, and maximum value of %d\n\r", min,
                 max);
@@ -366,8 +389,9 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
   }
 }
 
-keyboardspec_t detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> keys,
-                             Array<uint8_t, 16> boards) {
+keyboardspec_t detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
+                             Array<uint8_t, 16> &boards) {
+
   Array<boardspec_t, NUM_BOARDS> bspecs;
   Array<key_spec_t, KEYS_PER_BOARD> kspecs;
 
@@ -375,19 +399,25 @@ keyboardspec_t detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> keys,
 
   uint32_t sensor_id = 0;
 
+  for (auto &b : keys) {
+    Serial.println("Keys size is " + String(b.size()));
+  }
+
   for (size_t b = 0; b < boards.size(); b++) {
-    auto &board_keys = keys[b];
     uint8_t bnum = boards[b];
+    auto &board_keys = keys.at(b);
+    Serial.println("Looking at board " + String(b));
 
     Array<sensorspec_t, KEYS_PER_BOARD> sspecs;
 
-    Serial.println("Keys size is " + String(keys.size()));
-    for (size_t s = 0; s < keys.size(); s++) {
+    Serial.println("Keys size is " + String(board_keys.size()));
+    for (size_t s = 0; s < board_keys.size(); s++) {
       Serial.println("Doing detection for key at " + String(s));
       bool kp = board_keys[s];
 
       if (!kp) {
         Serial.println("key not present");
+        Serial.flush();
         continue;
       }
 
@@ -395,11 +425,16 @@ keyboardspec_t detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> keys,
       key_spec_t ks = detect_range(bnum, s, midi_num, sensor_id);
       sensorspec_t ss = sensorspec_t(sensor_id, pins[s]);
 
-      kspecs.push_back(ks);
-      sspecs.push_back(ss);
-
       midi_num++;
       sensor_id++;
+
+      if (ks.min_val < 0) {
+        Serial.printf("Skipping key %d on board %d\r\n", b, s);
+        continue;
+      }
+
+      kspecs.push_back(ks);
+      sspecs.push_back(ss);
     }
 
     boardspec_t bs(bnum, sspecs);
@@ -414,6 +449,92 @@ keyboardspec_t detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> keys,
   return k;
 }
 
+float gather_gbl_val(String msg, key_calibration_t &kc, sensorspec_t &ssp) {
+  Serial.println(msg);
+  Serial.println();
+  float latest = 0;
+  while (true) {
+    if (newline_waiting()) {
+      break;
+    }
+
+    auto v = analogRead(ssp.pin_num);
+    float normal = kc.normalize_sample(v);
+
+    Serial.print("\r");
+    for (int i = 0; i < 12; i++) {
+      Serial.print("          ");
+    }
+    Serial.print("\r");
+    print_normalized(normal);
+    latest = normal;
+    delay(30);
+  }
+
+  float val = prompt_float(msg, 0, 1, latest);
+  Serial.printf("You selected %f\r\n", val);
+  bool c = confirm("do you want to continue with this val?", true);
+  if (c) {
+    return val;
+  } else {
+    return gather_gbl_val(msg, kc, ssp);
+  }
+}
+
+global_key_config_t gbl_config(keyboardspec_t &spec) {
+  sensorspec_t *sensor = nullptr;
+  boardspec_t *board = nullptr;
+  key_spec_t *key = nullptr;
+  // just pick a key
+  for (auto &board_i : spec.sampler.boards) {
+    board = &board_i;
+    for (auto &sensor_i : board_i.sensors) {
+      sensor = &sensor_i;
+      goto OUT;
+    }
+  }
+OUT:
+
+  if (sensor == nullptr) {
+    Serial.println("No keys were found!");
+    return global_key_config_t();
+  }
+
+  for (auto &key_i : spec.keys) {
+    if (key_i.sensor_id == sensor->sensor_id) {
+      key = &key_i;
+    }
+  }
+
+  if (key == nullptr) {
+    Serial.println("No keys were found!");
+    return global_key_config_t();
+  }
+
+  // now, figure out detect range
+  auto kc = key_calibration_t(*key);
+
+  set_board(board->board_num);
+  delay(3);
+
+  global_key_config_t gbl;
+
+  gbl.strike =
+      gather_gbl_val("What strike point do you want to use?", kc, *sensor);
+  gbl.letoff =
+      gather_gbl_val("What letoff point do you want to use?", kc, *sensor);
+  gbl.repetition =
+      gather_gbl_val("What repetition point do you want to use?", kc, *sensor);
+  gbl.active =
+      gather_gbl_val("What active point do you want to use?", kc, *sensor);
+  gbl.damper_down =
+      gather_gbl_val("What damper_down point do you want to use?", kc, *sensor);
+  gbl.damper_up =
+      gather_gbl_val("What damper_up point do you want to use?", kc, *sensor);
+
+  return gbl;
+}
+
 keyboardspec_t run_calibration() {
   Serial.println("Beginning calibration");
 
@@ -421,10 +542,16 @@ keyboardspec_t run_calibration() {
 
   auto keys = detect_keys(boards);
 
+  for (auto &b : keys) {
+    Serial.printf("Found count %d\r\n", b.size());
+  }
+
   Serial.println("Calibrating minimum and maximum values");
 
   // auto specs = detect_ranges({}, {});
   auto specs = detect_ranges(keys, boards);
+
+  specs.gbl = gbl_config(specs);
 
   return specs;
 }

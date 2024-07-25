@@ -1,13 +1,18 @@
+#include "core_pins.h"
 #include "sampler2.cpp"
 #include "utils.cpp"
 
 #include "Array.h"
 #include "usb_midi.h"
 #include "usb_serial.h"
+#include <cmath>
 
 #ifndef YAHP_KEY
 #define YAHP_KEY
 
+#define ENABLE_MIDI
+
+static const size_t STRIKE_BUF_SIZE = 64;
 static const uint16_t DEFAULT_BOTTOM = 270;
 static const uint16_t DEFAULT_UP = 460;
 static const uint16_t DEFAULT_GAP = DEFAULT_UP - DEFAULT_BOTTOM;
@@ -22,10 +27,9 @@ struct key_calibration_t {
 
   inline float normalize_sample(uint16_t sample) {
     float as_f = sample;
-    float in_range = this->spec.max_val - this->spec.min_val;
 
-    as_f -= this->spec.min_val;
-    float normalized = as_f / in_range;
+    float normalized =
+        (as_f - this->spec.min_val) / (this->spec.max_val - this->spec.min_val);
 
     return normalized;
   }
@@ -118,19 +122,29 @@ struct kbd_key_t {
 
   kbd_key_t() {}
 
-  sample_buf_t<128> strike_buf;
+  sample_buf_t<STRIKE_BUF_SIZE> strike_buf;
 
   key_state_e kstate = key_state_e::KEY_RESTING;
   damper_state_e dstate = damper_state_e::DAMPER_DOWN;
   sensor_t *sensor = nullptr;
   key_calibration_t calibration;
   global_key_config_t global_key_config;
+  uint32_t strike_millis = 0;
 
   inline new_state_t new_state_given(sample_t sample) {
     auto &c = this->calibration;
     auto &g = this->global_key_config;
 
     auto normalized = c.normalize_sample(sample.value);
+    if (false) {
+      Serial.println("Normalized: " + String(normalized) + " for note " +
+                     this->fmt_note());
+    }
+
+    if (false) {
+      Serial.println("Got a val for " + this->fmt_note() + " of " +
+                     String(sample.value));
+    }
 
     if (normalized <= g.active) {
       return new_state_t(key_state_e::KEY_RESTING, damper_state_e::DAMPER_DOWN);
@@ -139,10 +153,18 @@ struct kbd_key_t {
     damper_state_e ds;
     key_state_e ks;
 
+    uint32_t since_strike = millis() - this->strike_millis;
+
     if (normalized > g.damper_up) {
       ds = damper_state_e::DAMPER_UP;
-    } else if (normalized < g.damper_down) {
+    } else if (normalized < g.damper_down && since_strike > 300) {
       ds = damper_state_e::DAMPER_DOWN;
+      if (this->dstate == damper_state_e::DAMPER_UP) {
+        Serial.printf("Transitions with an absolute of %d and min %d\r\n",
+                      sample.value, this->calibration.spec.min_val);
+        Serial.printf("Transitions with a normal of %f\r\n",
+                      normalized); // + String(normalized));
+      }
     } else {
       ds = this->dstate;
     }
@@ -157,6 +179,7 @@ struct kbd_key_t {
       ks = key_state_e::KEY_CRITICAL;
     } else if (normalized > g.strike) {
       ks = key_state_e::KEY_STRIKING;
+      this->strike_millis = millis();
     }
 
     return new_state_t(ks, ds);
@@ -169,10 +192,15 @@ struct kbd_key_t {
     return this->sensor->buf.unackd != 0;
   }
 
+  String fmt_note() { return format_note(this->calibration.spec.midi_note); }
+
   inline void process_samples() {
+    // print_value(this->sensor->buf.latest().value, true);
+
     if (!this->process_needed()) [[likely]] {
       return; // no new info
     }
+    // Serial.println("samples need processing");
 
     auto latest = this->sensor->buf.latest();
 
@@ -180,8 +208,10 @@ struct kbd_key_t {
 
     if (ns.key_state == key_state_e::KEY_RESTING) {
       this->sensor->priority = sensor_t::poll_priority_e::RELAXED;
+      // Serial.println(this->fmt_note() + " goes to rest");
     } else if (ns.key_state == key_state_e::KEY_READY &&
                this->kstate == key_state_e::KEY_RESTING) {
+      // Serial.println(this->fmt_note() + " goes to critical polling");
       this->sensor->priority = sensor_t::poll_priority_e::CRITICAL;
     } else if (ns.key_state == key_state_e::KEY_CRITICAL) {
       // start collecting samples
@@ -192,6 +222,7 @@ struct kbd_key_t {
     } else if (ns.key_state == key_state_e::KEY_STRIKING &&
                this->kstate == key_state_e::KEY_CRITICAL) {
       // note played, grab samples and process velocity
+      Serial.printf("%s processes strike\r\n", this->fmt_note().c_str());
       this->process_strike();
       this->strike_buf.clear();
     } else if (ns.key_state == key_state_e::KEY_READY &&
@@ -214,30 +245,42 @@ struct kbd_key_t {
   }
 
   void lift_damper() {
+    this->dstate = damper_state_e::DAMPER_UP;
+    return; // for now
 #if defined(ENABLE_MIDI)
     // does this work?
-    usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
+    // usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
+    auto note = this->calibration.spec.midi_note;
+    auto channel = this->calibration.spec.midi_channel;
+    usbMIDI.sendAfterTouchPoly(note, 127, 1);
 #endif
   }
 
   void lower_damper() {
-    // Serial.println("Damp note " + this->format_note());
+    this->dstate = damper_state_e::DAMPER_DOWN;
+    Serial.printf("Damp note %s\r\n", this->fmt_note().c_str());
+    Serial.printf("The current level is %d\r\n" +
+                  (int32_t)this->sensor->buf.latest().value);
+
 #if defined(ENABLE_MIDI)
-    usbMIDI.sendNoteOff(70 + this->key_number, 127, 0);
+    auto note = this->calibration.spec.midi_note;
+    auto channel = this->calibration.spec.midi_channel;
+    usbMIDI.sendNoteOff(note, 127, 1);
     // usbMIDI.send_now();
 #endif
   }
 
-  float linear_regression(Array<sample_t, 1024> &points) {
+  float linear_regression(Array<sample_t, STRIKE_BUF_SIZE> &points) {
+      Serial.printf("Have %d datapoints to work with\r\n", points.size());
     // subtract time of the first point, and value of the minimum
-    float min_x = points.back().time;
+    uint32_t min_x = points.back().time;
 
-    float min_val = 1000;
+    /*float min_val = 1000;
     for (auto point : points) {
       if (point.value < min_val) {
         min_val = point.value;
       }
-    }
+    }*/
 
     float sum_x = 0;
     float sum_y = 0;
@@ -246,7 +289,12 @@ struct kbd_key_t {
     float n = points.size();
     for (auto point : points) {
       float x = (point.time - min_x);
-      float y = (point.value - min_val);
+      // float y = (point.value - min_val);
+      float y = this->calibration.normalize_sample(point.value);
+      print_normalized(y);
+      Serial.println();
+      Serial.flush();
+      delay(1);
       sum_x += x;
       sum_y += y;
       sum_xmy += x * y;
@@ -268,7 +316,7 @@ struct kbd_key_t {
   }
 
   void process_strike() {
-    Array<sample_t, 1024> ar;
+    Array<sample_t, STRIKE_BUF_SIZE> ar;
 
     // do this dumbly for now, we can do an iterator or something later
     // if this costs us
@@ -283,22 +331,35 @@ struct kbd_key_t {
     if (midi_velocity > 127) {
       midi_velocity = 127;
     }
+    if (midi_velocity == 0) {
+      midi_velocity = 1;
+    }
 
 #if defined(ENABLE_MIDI)
-    usbMIDI.sendNoteOn(this->calibration->spec.midi_note, midi_velocity,
-                       this->calibration->spec.midi_channel);
+    auto note = this->calibration.spec.midi_note;
+    auto channel = this->calibration.spec.midi_channel;
+    Serial.println("Slope was " + String(slope));
+    Serial.println("normalized was " + String(normalized_velocity));
+    Serial.println("Sends velocity: " + String(midi_velocity));
+    Serial.println("Sent note on! Channel: " + String(channel));
+    usbMIDI.sendNoteOn(note, midi_velocity, 1);
 #endif
   }
 
   // returns a velocity clamped to [0, 1]
   // for use in midi
   float map_velocity(float v) {
+      v = (v < 0) ? -v : v;
     auto &c = this->global_key_config;
     // first, normalize the value
     float range = c.max_velocity - c.min_velocity;
 
     float n = (v - c.min_velocity) / range;
+    // abs func
     n = (n < 0) ? -n : n;
+
+    return pow(n, 0.5);
+    // return std::sqrt(v);
 
     // float p1x = c.bezier_p1x;
     float p1y = c.bezier_p1y;

@@ -365,13 +365,17 @@ static keyboardspec_t *yahp_from_sd() {
 static void yahp_to_sd(keyboardspec_t &kbs) {
 Serial.println("Saving config to sd...");
   auto d = kbs.to_json();
+  String buf;
 
   //size_t len = 0;
-  size_t len = serializeJsonPretty(d, JSON_FILE, JSON_FILE_MAX_LENGTH);
+  //serializeJson();
+  //size_t len = serializeJsonPretty(d, &JSON_FILE, JSON_FILE_MAX_LENGTH - 1);
+  //size_t len = serializeJsonPretty(d, buf, 28000);
+  size_t len = serializeJsonPretty(d, buf);
 
   auto f = SD.open("config.json", FILE_WRITE_BEGIN);
 
-  f.write(JSON_FILE, len);
+  f.write(&buf[0], len);
   f.close();
   Serial.println("Done!");
 }

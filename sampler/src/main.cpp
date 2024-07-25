@@ -128,7 +128,7 @@ void setup() {
     // need to make a new config
     Serial.println("no config exists, making a new one");
     auto cfgv = run_calibration();
-    //yahp_to_sd(cfgv);
+    yahp_to_sd(cfgv);
   }
 
   spec = yahp_from_sd();

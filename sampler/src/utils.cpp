@@ -66,8 +66,16 @@ inline T max(T a, T b) {
     }
 }
 
+int32_t myabs(int32_t v) {
+    if (v < 0) {
+        return -v;
+    } else {
+        return v;
+    }
+}
+
 [[gnu::unused]]
-static void print_bounds(int value, int upper, int lower) {
+static void print_bounds(int value, int upper, int lower, bool term) {
   Serial.print(value);
   value = value > upper ? upper : value;
   value = value - lower;
@@ -90,16 +98,18 @@ static void print_bounds(int value, int upper, int lower) {
 
   Serial.print("\xE2\x96\x88");
   
-  Serial.print("\r\n");
+  if(term) {
+    Serial.print("\r\n");
+  }
 }
 
 [[gnu::unused]]
-static void print_value(int value) {
+static void print_value(int value, bool term) {
   //int min = 200;
   //int max = 500;
-  int lower = 210;
-  int upper = 550;
-  print_bounds(value, upper, lower);
+  int lower = 0;
+  int upper = 1000;
+  print_bounds(value, upper, lower, term);
 
 }
 

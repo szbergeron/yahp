@@ -140,7 +140,7 @@ FLASHMEM void setup() {
   Serial.println("Made sampler");
 
   // KEYBOARD = new keyboard_t(*spec, SAMPLER);
-  KEYBOARD = new (KEYBOARD_BUF) keyboard_t(*spec, SAMPLER);
+  KEYBOARD = new (KEYBOARD_BUF) keyboard_t(spec, SAMPLER, spec->gbl);
 
   IDLER = new (IDLER_BUF) idler_t(KEYBOARD);
 

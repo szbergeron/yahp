@@ -67,7 +67,7 @@ struct key_calibration_t {
   key_calibration_t(key_spec_t &spec) : spec(spec) {}
 
   key_calibration_t() {
-      //errorln("default constructed a calibration");
+    // errorln("default constructed a calibration");
   }
 };
 
@@ -116,9 +116,7 @@ struct kbd_key_t {
       : sensor(sensor), calibration(calibration),
         global_key_config(global_key_config) {}
 
-  kbd_key_t() {
-    // errorln("default constructed a kbd_key_t");
-  }
+  kbd_key_t() {}
 
   sample_buf_t<128> strike_buf;
 
@@ -127,7 +125,6 @@ struct kbd_key_t {
   sensor_t *sensor = nullptr;
   key_calibration_t calibration;
   global_key_config_t global_key_config;
-
 
   inline new_state_t new_state_given(sample_t sample) {
     auto &c = this->calibration;

@@ -269,8 +269,8 @@ struct samplerspec_t {
   }
 };
 
-static const size_t JSON_FILE_MAX_LENGTH = 128000;
-static DMAMEM char JSON_FILE[JSON_FILE_MAX_LENGTH];
+static const size_t JSON_FILE_MAX_LENGTH = 28000;
+static char JSON_FILE[JSON_FILE_MAX_LENGTH];
 //static uint8_t *JSON_FILE = nullptr;
 
 struct keyboardspec_t {

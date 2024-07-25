@@ -106,12 +106,6 @@ template <uint32_t BUFSIZE = SAMPLE_BUFFER_LENGTH> struct sample_buf_t {
   inline sample_t latest() { return this->read_nth_oldest(0); }
 };
 
-/*char (*__kaboom)[sizeof( sample_buf_t<45056> )] = 1;
-void kaboom_print( void )
-{
-    printf( "%d", __kaboom );
-}*/
-
 struct sensor_t;
 
 struct sample_request_t {

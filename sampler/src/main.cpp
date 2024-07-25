@@ -11,7 +11,7 @@
 #include "sampler2.cpp"
 #include <algorithm>
 
-struct stats_t {
+/*struct stats_t {
   float avg_ns = 0;
   uint64_t count;
 
@@ -26,13 +26,13 @@ struct stats_t {
   }
 
   stats_t() {}
-};
+};*/
 
 
 struct idler_t {
-  stats_t key_stats;
+  /*stats_t key_stats;
   stats_t pedal_stats;
-  stats_t midi_stats;
+  stats_t midi_stats;*/
   keyboard_t *keyboard = nullptr;
 
   __attribute__((always_inline)) inline void step_idle(uint32_t window_ns,
@@ -62,6 +62,13 @@ struct idler_t {
 
   idler_t(keyboard_t* keyboard): keyboard(keyboard) {}
 };
+
+/*char (*__kaboom)[sizeof(sampler_t)] = 1;
+void kaboom_print( void )
+{
+    printf( "%d", __kaboom )
+}*/
+
 
 //static sampler_t SAMPLER;
 //static keyboard_t KEYBOARD;
@@ -95,10 +102,8 @@ __attribute__((always_inline)) static inline void step_idle(uint32_t window_ns,
 
 // static ADC adc();
 
-FLASHMEM void setup() {
+void setup() {
   Serial.println("Begin setup");
-  delay(5000);
-  Serial.println("Begin setup 2");
 
   Serial.setTimeout(100000);
   pinMode(LED_BUILTIN, OUTPUT);
@@ -118,8 +123,8 @@ FLASHMEM void setup() {
   if (spec == nullptr) {
     // need to make a new config
     Serial.println("no config exists, making a new one");
-    auto cfgv = run_calibration();
-    yahp_to_sd(cfgv);
+    //auto cfgv = run_calibration();
+    //yahp_to_sd(cfgv);
   }
 
   spec = yahp_from_sd();

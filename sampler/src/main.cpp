@@ -1,15 +1,12 @@
 #include "ADC.h"
-#include "pins_arduino.h"
 #include "usb_midi.h"
-#include "usb_serial.h"
-#include <new>
-#define YAHP_DEBUG
 
 #include "calibrate.cpp"
-#include "core_pins.h"
 #include "keyboard.cpp"
 #include "sampler2.cpp"
 #include <algorithm>
+
+#define YAHP_DEBUG
 
 /*struct stats_t {
   float avg_ns = 0;
@@ -74,6 +71,7 @@ void kaboom_print( void )
 //static keyboard_t KEYBOARD;
 static uint8_t IDLER_BUF[sizeof(idler_t)];
 static idler_t* IDLER = nullptr;
+//union IDLER_U { uint8_t ignore, idler_t idler } IDLER;
 
 static uint8_t SAMPLER_BUF[sizeof(sampler_t)];
 static sampler_t* SAMPLER = nullptr;
@@ -123,8 +121,8 @@ void setup() {
   if (spec == nullptr) {
     // need to make a new config
     Serial.println("no config exists, making a new one");
-    //auto cfgv = run_calibration();
-    //yahp_to_sd(cfgv);
+    auto cfgv = run_calibration();
+    yahp_to_sd(cfgv);
   }
 
   spec = yahp_from_sd();

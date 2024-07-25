@@ -9,12 +9,9 @@
 #include "ArduinoJson/Variant/JsonVariantConst.hpp"
 
 #include "FS.h"
-#include "avr/pgmspace.h"
 #include "wiring.h"
 #include <SD.h>
 #include <cstddef>
-#include <optional>
-#include <utility>
 
 using namespace ArduinoJson;
 

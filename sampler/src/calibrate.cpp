@@ -266,8 +266,8 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num,
 }
 
 keyboardspec_t
-detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
-              Array<uint8_t, 16> &boards) {
+detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> keys,
+              Array<uint8_t, 16> boards) {
   Array<boardspec_t, NUM_BOARDS> bspecs;
   Array<key_spec_t, KEYS_PER_BOARD> kspecs;
 
@@ -314,13 +314,13 @@ detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
 keyboardspec_t run_calibration() {
   Serial.println("Beginning calibration");
 
-  auto boards = detect_boards();
+  //auto boards = detect_boards();
 
-  auto keys = detect_keys(boards);
+  //auto keys = detect_keys(boards);
 
   Serial.println("Calibrating minimum and maximum values");
 
-  auto specs = detect_ranges(keys, boards);
+  auto specs = detect_ranges({}, {});
 
   return specs;
 }

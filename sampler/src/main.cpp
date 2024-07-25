@@ -4,6 +4,7 @@
 #include "calibrate.cpp"
 #include "keyboard.cpp"
 #include "sampler2.cpp"
+#include "utils.cpp"
 #include <algorithm>
 
 #define YAHP_DEBUG
@@ -111,6 +112,11 @@ void setup() {
     Serial.println("Waiting...");
   }
 
+  if (!SD.begin(BUILTIN_SDCARD)) {
+    Serial.println("Couldn't init SD");
+    eloop("failed to setup sdcard");
+  }
+
   // delay(5000);
   Serial.println("Setting up...");
   auto spec = yahp_from_sd();
@@ -122,7 +128,7 @@ void setup() {
     // need to make a new config
     Serial.println("no config exists, making a new one");
     auto cfgv = run_calibration();
-    yahp_to_sd(cfgv);
+    //yahp_to_sd(cfgv);
   }
 
   spec = yahp_from_sd();

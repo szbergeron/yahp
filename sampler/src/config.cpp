@@ -332,10 +332,6 @@ struct keyboardspec_t {
 // I KNOW this is horrible and has memory safety issues.
 // I just am not dealing with that right here, right now
 static keyboardspec_t *yahp_from_sd() {
-  if (!SD.begin(BUILTIN_SDCARD)) {
-    Serial.println("Couldn't init SD");
-    return nullptr;
-  }
 
   if (!SD.exists("config.json")) {
     Serial.println("No config on SD");
@@ -369,16 +365,8 @@ static keyboardspec_t *yahp_from_sd() {
 static void yahp_to_sd(keyboardspec_t &kbs) {
   auto d = kbs.to_json();
 
-  /*if (JSON_FILE == nullptr) {
-    JSON_FILE = malloc(JSON_FILE_MAX_LENGTH);
-  }*/
-
-  auto len = serializeJsonPretty(d, JSON_FILE, JSON_FILE_MAX_LENGTH);
-
-  if (!SD.begin(BUILTIN_SDCARD)) {
-    Serial.println("Couldn't init SD");
-    return;
-  }
+  size_t len = 0;
+  len = serializeJsonPretty(d, JSON_FILE, JSON_FILE_MAX_LENGTH);
 
   auto f = SD.open("config.json", FILE_WRITE_BEGIN);
 

@@ -9,6 +9,7 @@
 #include "keyboard.cpp"
 #include "sampler2.cpp"
 #include "utils.cpp"
+#include "magnets.cpp"
 #include <algorithm>
 
 #define YAHP_DEBUG
@@ -46,11 +47,9 @@ struct idler_t {
     // Serial.println("Stepping idle");
 
     for (kbd_key_t &k : this->keyboard->keys) {
-      if (k.process_needed()) {
-        auto note = format_note(k.calibration.spec.midi_note);
-        // Serial.println("Processing samples for " + note);
-        k.process_samples();
-      }
+      // auto note = format_note(k.calibration.spec.midi_note);
+      //  Serial.println("Processing samples for " + note);
+      k.process_sample();
 
       if (!run_all) {
         if (micros() - start > window) {
@@ -60,7 +59,7 @@ struct idler_t {
     }
 
     if (run_all) {
-      //usbMIDI.send_now();
+      // usbMIDI.send_now();
     }
   }
 
@@ -116,6 +115,8 @@ void configure_adc() {
   }
 }
 
+void doReboot() { SCB_AIRCR = 0x05FA0004; }
+
 // static ADC adc();
 
 void setup() {
@@ -129,7 +130,7 @@ void setup() {
 
   Serial.println("Begin setup");
 
-  //Serial.setTimeout(100000);
+  // Serial.setTimeout(100000);
   pinMode(LED_BUILTIN, OUTPUT);
 
   if (!SD.begin(BUILTIN_SDCARD)) {
@@ -150,15 +151,18 @@ void setup() {
     Serial.println("no config exists, making a new one");
     auto cfgv = run_calibration();
     yahp_to_sd(cfgv);
+
+    // come back through and load it
+    doReboot();
   }
 
-  spec = yahp_from_sd();
+  /*spec = yahp_from_sd();
 
   Serial.println("Loaded a final");
 
   if (spec == nullptr) {
     eloop("something is horribly wrong with the SD card!");
-  }
+  }*/
 
   Serial.println("Making adc/sampler/keyboard...");
   ADC adc;
@@ -183,17 +187,23 @@ void setup() {
   configure_adc();
 
   // now, initialize all the runtime values to match CFG
-  //Serial.begin(0);
-  //usbMIDI.begin();
+  // Serial.begin(0);
+  // usbMIDI.begin();
 }
 
 uint32_t lm = 0;
 bool state = false;
 
 void loop() {
+  // discard shit
+  /*while (usbMIDI.read()) {
+    // ignore incoming messages
+  }*/
+
   auto now = millis();
-  ;
-  if (now - lm > 700) {
+
+  if (now - lm > 400) {
+    Serial.println("looping...");
     lm = now;
     state = !state;
     digitalWrite(LED_BUILTIN, state);

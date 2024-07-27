@@ -12,10 +12,8 @@
 
 #define ENABLE_MIDI
 
-static const size_t STRIKE_BUF_SIZE = 64;
-static const uint16_t DEFAULT_BOTTOM = 270;
-static const uint16_t DEFAULT_UP = 460;
-static const uint16_t DEFAULT_GAP = DEFAULT_UP - DEFAULT_BOTTOM;
+static const size_t STRIKE_BUF_SIZE = 48;
+static const uint32_t SETTLE_DELAY_MS = 60;
 
 struct key_calibration_t {
   key_spec_t spec;
@@ -169,7 +167,10 @@ struct kbd_key_t {
       ds = this->dstate;
     }
 
-    if (normalized > g.active && normalized <= g.repetition) {
+    if (this->kstate == key_state_e::KEY_STRIKING && since_strike < 300) {
+      // still in strike recovery
+      ks = key_state_e::KEY_STRIKING;
+    } else if (normalized > g.active && normalized <= g.repetition) {
       ks = key_state_e::KEY_READY;
     } else if (normalized > g.repetition && normalized <= g.letoff) {
       // keep it as it is, either coming up (READY),
@@ -194,7 +195,76 @@ struct kbd_key_t {
 
   String fmt_note() { return format_note(this->calibration.spec.midi_note); }
 
-  inline void process_samples() {
+  inline void process_sample() {
+    if (!this->process_needed()) {
+      return;
+    }
+
+    this->sensor->buf.unackd = 0;
+    sample_t latest = this->sensor->buf.latest();
+    float value = this->calibration.normalize_sample(latest.value);
+
+    switch (this->kstate) {
+    case key_state_e::KEY_RESTING:
+      if (value > this->global_key_config.active) {
+        this->kstate = key_state_e::KEY_READY;
+        this->sensor->priority = sensor_t::poll_priority_e::CRITICAL;
+      } else {
+        // remain in state
+      }
+      break;
+    case key_state_e::KEY_READY:
+      if (value > this->global_key_config.letoff) {
+        // go to critical
+        this->strike_buf.add_sample(latest); // don't lose that one!
+        this->strike_buf.clear();            // ready it here
+        this->kstate = key_state_e::KEY_CRITICAL;
+      } else if (value < this->global_key_config.active) {
+        // drop to resting
+        this->sensor->priority = sensor_t::poll_priority_e::RELAXED;
+        this->kstate = key_state_e::KEY_RESTING;
+      }
+      break;
+    case key_state_e::KEY_CRITICAL:
+      this->strike_buf.add_sample(latest);
+
+      if (value > this->global_key_config.strike) {
+        // go to strike
+        this->kstate = key_state_e::KEY_STRIKING;
+        this->strike_millis = millis();
+        this->process_strike();
+      } else if (value < this->global_key_config.repetition) {
+        this->kstate = key_state_e::KEY_READY;
+      }
+
+      break;
+    case key_state_e::KEY_STRIKING:
+      bool settled = (millis() - this->strike_millis) > SETTLE_DELAY_MS;
+      if (value < this->global_key_config.repetition && settled) {
+        // only one way out \:)
+        this->kstate = key_state_e::KEY_READY;
+      }
+
+      break;
+    }
+
+    switch (this->dstate) {
+    case damper_state_e::DAMPER_UP:
+      if(value < this->global_key_config.damper_down) {
+          this->dstate = damper_state_e::DAMPER_DOWN;
+          this->lower_damper();
+      }
+      break;
+    case damper_state_e::DAMPER_DOWN:
+      if(value > this->global_key_config.damper_up) {
+          this->dstate = damper_state_e::DAMPER_UP;
+          this->lift_damper();
+      }
+      break;
+    }
+  }
+
+  /*inline void process_samples() {
     // print_value(this->sensor->buf.latest().value, true);
 
     if (!this->process_needed()) [[likely]] {
@@ -214,8 +284,10 @@ struct kbd_key_t {
       // Serial.println(this->fmt_note() + " goes to critical polling");
       this->sensor->priority = sensor_t::poll_priority_e::CRITICAL;
     } else if (ns.key_state == key_state_e::KEY_CRITICAL) {
-      // start collecting samples
+      // Serial.println("In critical state");
+      //  start collecting samples
       for (int32_t i = (int32_t)this->sensor->buf.unackd - 1; i >= 0; i--) {
+        Serial.println("Adds sample");
         this->strike_buf.add_sample(this->sensor->buf.read_nth_oldest(i));
         this->sensor->buf.unackd = 0;
       }
@@ -242,7 +314,7 @@ struct kbd_key_t {
     }
 
     this->dstate = ns.damper_state;
-  }
+  }*/
 
   void lift_damper() {
     this->dstate = damper_state_e::DAMPER_UP;
@@ -250,7 +322,7 @@ struct kbd_key_t {
 #if defined(ENABLE_MIDI)
     // does this work?
     // usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
-    auto note = this->calibration.spec.midi_note;
+    auto note = this->calibration.spec.midi_note + 30;
     auto channel = this->calibration.spec.midi_channel;
     usbMIDI.sendAfterTouchPoly(note, 127, 1);
 #endif
@@ -263,7 +335,7 @@ struct kbd_key_t {
                   (int32_t)this->sensor->buf.latest().value);
 
 #if defined(ENABLE_MIDI)
-    auto note = this->calibration.spec.midi_note;
+    auto note = this->calibration.spec.midi_note + 30;
     auto channel = this->calibration.spec.midi_channel;
     usbMIDI.sendNoteOff(note, 127, 1);
     // usbMIDI.send_now();
@@ -271,7 +343,7 @@ struct kbd_key_t {
   }
 
   float linear_regression(Array<sample_t, STRIKE_BUF_SIZE> &points) {
-      Serial.printf("Have %d datapoints to work with\r\n", points.size());
+    Serial.printf("Have %d datapoints to work with\r\n", points.size());
     // subtract time of the first point, and value of the minimum
     uint32_t min_x = points.back().time;
 
@@ -287,14 +359,14 @@ struct kbd_key_t {
     float sum_xmy = 0;
     float sum_xmx = 0;
     float n = points.size();
+    Serial.println("Profile:");
     for (auto point : points) {
       float x = (point.time - min_x);
       // float y = (point.value - min_val);
       float y = this->calibration.normalize_sample(point.value);
-      print_normalized(y);
-      Serial.println();
-      Serial.flush();
-      delay(1);
+      // print_normalized(y);
+      Serial.printf("%f @ %f\r\n", y, x);
+      // Serial.flush();
       sum_x += x;
       sum_y += y;
       sum_xmy += x * y;
@@ -312,7 +384,7 @@ struct kbd_key_t {
     float b_1 = SS_xy / SS_xx;
     // float b_0 = m_y - b_1 * m_x;
 
-    return b_1;
+    return b_1 * 1000;
   }
 
   void process_strike() {
@@ -336,7 +408,7 @@ struct kbd_key_t {
     }
 
 #if defined(ENABLE_MIDI)
-    auto note = this->calibration.spec.midi_note;
+    auto note = this->calibration.spec.midi_note + 30;
     auto channel = this->calibration.spec.midi_channel;
     Serial.println("Slope was " + String(slope));
     Serial.println("normalized was " + String(normalized_velocity));
@@ -349,7 +421,7 @@ struct kbd_key_t {
   // returns a velocity clamped to [0, 1]
   // for use in midi
   float map_velocity(float v) {
-      v = (v < 0) ? -v : v;
+    v = (v < 0) ? -v : v;
     auto &c = this->global_key_config;
     // first, normalize the value
     float range = c.max_velocity - c.min_velocity;

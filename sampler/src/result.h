@@ -1,3 +1,4 @@
+#include "unit.h"
 #include "utils.cpp"
 
 #ifndef YAHP_RESULT
@@ -10,6 +11,9 @@ struct result_t {
         union inner {
             T ok;
             E err;
+
+            inner() {}
+            ~inner() {}
         } inner;
         bool _is_ok;
 
@@ -23,7 +27,11 @@ struct result_t {
 
     public:
         static result_t<T, E> ok(T v) {
-            //
+            return result_t(v);
+        }
+
+        static result_t<T, E> err(E e) {
+            return result_t(e);
         }
 
         T unwrap() {
@@ -35,7 +43,7 @@ struct result_t {
         }
 
         T unwrap_or(T v) {
-            if(!this->_is_ok) {
+            if(!this->_is_ok) [[unlikely]] {
                 return v;
             } else {
                 return this->inner.ok;
@@ -56,11 +64,14 @@ struct result_t {
         
         ~result_t() {
             if (this->_is_ok) {
-                &(this->inner.ok)->T::~T();
+                (&this->inner.ok)->T::~T();
             } else {
-                &(this->inner.err)->E::~E();
+                (&this->inner.err)->E::~E();
             }
         }
 };
+
+/*template<typename T>
+using option_t = result_t<T, unit_t>;*/
 
 #endif

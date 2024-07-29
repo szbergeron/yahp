@@ -3,18 +3,10 @@
 #include "utils.cpp"
 #include "magnets.cpp"
 
-#include "Array.h"
-
-#include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
-#include "ArduinoJson/Variant/JsonVariantConst.hpp"
-#include <ArduinoJson.hpp>
-
 #include "FS.h"
 #include "wiring.h"
 #include <SD.h>
 #include <cstddef>
-
-using namespace ArduinoJson;
 
 #ifndef YAHP_CONFIG
 #define YAHP_CONFIG
@@ -54,8 +46,8 @@ struct key_spec_t {
   // position of both `self` and the neighboring
   // sensors
   // some non-linear factor? is it needed?
-  Array<float, CONTRIB_WINDOW> factor_left;
-  Array<float, CONTRIB_WINDOW> factor_right;
+  vector_t<float, CONTRIB_WINDOW> factor_left;
+  vector_t<float, CONTRIB_WINDOW> factor_right;
 #endif
 
   uint8_t midi_note = 0;
@@ -205,12 +197,12 @@ struct sensorspec_t {
 };
 
 struct boardspec_t {
-  Array<sensorspec_t, KEYS_PER_BOARD> sensors;
+  vector_t<sensorspec_t, KEYS_PER_BOARD> sensors;
   uint8_t board_num = 0;
 
   boardspec_t() {}
 
-  boardspec_t(uint8_t board_num, Array<sensorspec_t, KEYS_PER_BOARD> sensors)
+  boardspec_t(uint8_t board_num, vector_t<sensorspec_t, KEYS_PER_BOARD> sensors)
       : sensors(sensors), board_num(board_num) {}
 
   boardspec_t(JsonObject j) : board_num(j["board_num"]) {
@@ -241,9 +233,9 @@ struct boardspec_t {
 };
 
 struct samplerspec_t {
-  Array<boardspec_t, NUM_BOARDS> boards;
+  vector_t<boardspec_t, NUM_BOARDS> boards;
 
-  samplerspec_t(Array<boardspec_t, NUM_BOARDS> boards) : boards(boards) {}
+  samplerspec_t(vector_t<boardspec_t, NUM_BOARDS> boards) : boards(boards) {}
 
   samplerspec_t() {}
 
@@ -276,15 +268,15 @@ struct samplerspec_t {
 struct keyboardspec_t {
   samplerspec_t sampler;
 
-  Array<key_spec_t, KEY_COUNT_MAX> keys;
-  Array<pedal_spec_t, PEDAL_COUNT_MAX> pedals;
+  vector_t<key_spec_t, KEY_COUNT_MAX> keys;
+  vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals;
 
   global_key_config_t gbl;
 
   keyboardspec_t() {}
 
-  keyboardspec_t(samplerspec_t sampler, Array<key_spec_t, KEY_COUNT_MAX> keys,
-                 Array<pedal_spec_t, PEDAL_COUNT_MAX> pedals)
+  keyboardspec_t(samplerspec_t sampler, vector_t<key_spec_t, KEY_COUNT_MAX> keys,
+                 vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals)
       : sampler(sampler), keys(keys), pedals(pedals) {}
 
   keyboardspec_t(JsonObject d)

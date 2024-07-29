@@ -6,8 +6,6 @@
 #include "usb_serial.h"
 #include "utils.cpp"
 
-#include <Array.h>
-
 #include "core_pins.h"
 #include "elapsedMillis.h"
 #include <cstddef>
@@ -25,9 +23,9 @@ void blinkblink() {
 }
 
 struct tempboards_t {
-  Array<uint8_t, NUM_BOARDS> boards;
+  vector_t<uint8_t, NUM_BOARDS> boards;
 
-  tempboards_t(Array<uint8_t, NUM_BOARDS> boards) : boards(boards) {}
+  tempboards_t(vector_t<uint8_t, NUM_BOARDS> boards) : boards(boards) {}
 };
 
 struct tempkey_t {
@@ -53,7 +51,7 @@ tempboards_t detect_boards() {
 
   Serial.printf("Setting to %d boards\n\r", board_count);
 
-  Array<uint8_t, NUM_BOARDS> boards;
+  vector_t<uint8_t, NUM_BOARDS> boards;
 
   bool sequential = false;
 
@@ -79,7 +77,7 @@ tempboards_t detect_boards() {
   return {boards};
 }
 
-Array<Array<bool, KEYS_PER_BOARD>, NUM_BOARDS>
+vector_t<vector_t<bool, KEYS_PER_BOARD>, NUM_BOARDS>
 detect_keys(tempboards_t &boards) {
 
   for (size_t i = 0; i < KEYS_PER_BOARD; i++) {
@@ -97,13 +95,13 @@ detect_keys(tempboards_t &boards) {
   float thres_f = vp * 1024;
   uint32_t thres = thres_f;
 
-  Array<Array<bool, KEYS_PER_BOARD>, 16> info;
+  vector_t<vector_t<bool, KEYS_PER_BOARD>, NUM_BOARDS> info;
 
   for (auto &bid : boards.boards) {
     set_board(bid);
     delayMicroseconds(100);
 
-    Array<bool, KEYS_PER_BOARD> bi;
+    vector_t<bool, KEYS_PER_BOARD> bi;
 
     for (size_t i = 0; i < KEYS_PER_BOARD; i++) {
       delayMicroseconds(30);
@@ -258,11 +256,11 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
 }
 
 keyboardspec_t
-detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
+detect_ranges(vector_t<vector_t<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
               tempboards_t &boards) {
 
-  Array<boardspec_t, NUM_BOARDS> bspecs;
-  Array<key_spec_t, KEYS_PER_BOARD> kspecs;
+  vector_t<boardspec_t, NUM_BOARDS> bspecs;
+  vector_t<key_spec_t, KEYS_PER_BOARD> kspecs;
 
   uint32_t midi_num = FIRST_MIDI_NOTE;
 
@@ -277,7 +275,7 @@ detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
     auto &board_keys = keys.at(b);
     Serial.println("Looking at board " + String(b));
 
-    Array<sensorspec_t, KEYS_PER_BOARD> sspecs;
+    vector_t<sensorspec_t, KEYS_PER_BOARD> sspecs;
 
     Serial.println("Keys size is " + String(board_keys.size()));
     for (size_t s = 0; s < board_keys.size(); s++) {

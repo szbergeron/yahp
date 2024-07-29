@@ -1,21 +1,13 @@
-#include "Array.h"
+#include "utils.cpp"
 
-#include "ArduinoJson/Object/JsonObject.hpp"
-#include "ArduinoJson/Document/JsonDocument.hpp"
-#include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
-#include "ArduinoJson/Variant/JsonVariantConst.hpp"
-#include <ArduinoJson.hpp>
 
 #include "core_pins.h"
 #include "elapsedMillis.h"
-//#include "sampler2.cpp"
-#include "utils.cpp"
 #include <cstddef>
+#include "vector.cpp"
 
 #ifndef YAHP_MAGNETS
 #define YAHP_MAGNETS
-
-using namespace ArduinoJson;
 
 const size_t MAGNET_INTERPOLATOR_POINTS = 16;
 
@@ -40,7 +32,7 @@ struct point_t {
 
 template <uint32_t POINTS> struct interpolater_t {
   // point_t points[POINTS];
-  Array<point_t, POINTS> points;
+  vector_t<point_t, POINTS> points;
 
   inline float interpolate(float x) {
     int idx = 0;
@@ -82,8 +74,8 @@ template <uint32_t POINTS> struct interpolater_t {
   }
 
   template <uint32_t INPUT_POINTS>
-  interpolater_t(Array<point_t, INPUT_POINTS> inputs) {
-    Array<point_t, INPUT_POINTS> sorted;
+  interpolater_t(vector_t<point_t, INPUT_POINTS> inputs) {
+    vector_t<point_t, INPUT_POINTS> sorted;
 
     // first, sort it by x
     for (int i = 0; i < inputs.size(); i++) {
@@ -128,8 +120,8 @@ template <uint32_t POINTS> struct interpolater_t {
       this->points.push_back(point_t(max, 1));
   }
 
-  interpolater_t(JsonObject j) {
-    auto ja = j.as<JsonArray>();
+  interpolater_t(JsonArray j) {
+    auto ja = j;
 
     for (auto ent : ja) {
       this->points.push_back(point_t(ent.as<JsonObject>()));
@@ -266,7 +258,7 @@ template <uint32_t BUFSIZE> struct longsample_buf_t {
   }
 };
 
-float linear_regression(Array<longsample_t, 10> &points) {
+float linear_regression(vector_t<longsample_t, 10> &points) {
   Serial.printf("Have %d datapoints to work with\r\n", points.size());
   // subtract time of the first point, and value of the minimum
   uint32_t min_x = points.back().time;
@@ -463,7 +455,7 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
     }
   }
 
-  Array<longsample_t, 4096> fall;
+  vector_t<longsample_t, 4096> fall;
 
   // now, we have our bounds
   for (int i = start_pos; i >= end_pos; i--) {
@@ -479,7 +471,7 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
   float initial_velocity = 0;
   auto t_0 = fall.at(0).time;
 
-  Array<position_t, 4096> datapoints;
+  vector_t<position_t, 4096> datapoints;
 
   // TODO: is this right? do I need to know if these are 0 vs uninit?
   float distance_max = 0;

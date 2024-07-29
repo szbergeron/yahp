@@ -3,7 +3,6 @@
 
 #include "ADC.h"
 #include "ADC_Module.h"
-#include "Array.h"
 #include "core_pins.h"
 
 #ifndef YAHP_SAMPLER
@@ -218,7 +217,7 @@ struct adcs_info_t {
 };
 
 struct board_t {
-  Array<sensor_t, KEYS_PER_BOARD> keys;
+  vector_t<sensor_t, KEYS_PER_BOARD> keys;
   uint8_t board_num;
   adcs_info_t adcs;
 
@@ -245,7 +244,7 @@ struct board_t {
     // so we have as much time as possible
     // before needing to sample
 
-    Array<sample_request_t, KEYS_PER_BOARD> requests;
+    vector_t<sample_request_t, KEYS_PER_BOARD> requests;
 
     for (auto &k : this->keys) {
       if (k.due_now() || k.due_relaxed()) {
@@ -257,10 +256,10 @@ struct board_t {
     this->sample_all(requests);
   }
 
-  void sample_all(Array<sample_request_t, KEYS_PER_BOARD> &requests) {
-    Array<sample_request_t, KEYS_PER_BOARD> for_a;
-    Array<sample_request_t, KEYS_PER_BOARD> for_b;
-    Array<sample_request_t, KEYS_PER_BOARD> for_both;
+  void sample_all(vector_t<sample_request_t, KEYS_PER_BOARD> &requests) {
+    vector_t<sample_request_t, KEYS_PER_BOARD> for_a;
+    vector_t<sample_request_t, KEYS_PER_BOARD> for_b;
+    vector_t<sample_request_t, KEYS_PER_BOARD> for_both;
 
     for (auto request : requests) {
       bool allowed_0i = this->adcs.adc[0].allowed_pins[request.pin];
@@ -287,18 +286,18 @@ struct board_t {
     while (!for_a.empty() || !for_b.empty() || !for_both.empty()) {
       if (!for_a.empty()) {
         a = for_a.back();
-        for_a.pop_back();
+        for_a.pop_back().unwrap();
       } else if (!for_both.empty()) {
         a = for_both.back();
-        for_both.pop_back();
+        for_both.pop_back().unwrap();
       }
 
       if (!for_b.empty()) {
         b = for_b.back();
-        for_b.pop_back();
+        for_b.pop_back().unwrap();
       } else if (!for_both.empty()) {
         b = for_both.back();
-        for_both.pop_back();
+        for_both.pop_back().unwrap();
       }
 
       uint32_t ts_a;
@@ -420,13 +419,11 @@ struct board_t {
       this->keys.push_back(sensor);
     }
   }
-
-  board_t() : board_num(0), adcs() {}
 };
 
 struct sampler_t {
   ADC *adc = nullptr;
-  Array<board_t, NUM_BOARDS> boards;
+  vector_t<board_t, NUM_BOARDS> boards;
 
   sensor_t *find_sensor(uint32_t sensor_id) {
     for (auto &board : this->boards) {
@@ -449,8 +446,6 @@ struct sampler_t {
   }
 
   ~sampler_t() { delete this->adc; }
-
-  sampler_t() {}
 
   void sample_round() {
     for (auto &board : this->boards) {

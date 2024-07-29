@@ -2,7 +2,6 @@
 #include "sampler2.cpp"
 #include "utils.cpp"
 
-#include "Array.h"
 #include "usb_midi.h"
 #include "usb_serial.h"
 #include <cmath>
@@ -74,10 +73,6 @@ struct key_calibration_t {
   }*/
 
   key_calibration_t(key_spec_t &spec) : spec(spec) {}
-
-  key_calibration_t() {
-    // errorln("default constructed a calibration");
-  }
 };
 
 struct kbd_key_t {
@@ -124,8 +119,6 @@ struct kbd_key_t {
             global_key_config_t global_key_config)
       : sensor(sensor), calibration(calibration),
         global_key_config(global_key_config) {}
-
-  kbd_key_t() {}
 
   sample_buf_t<STRIKE_BUF_SIZE> strike_buf;
 
@@ -349,7 +342,7 @@ struct kbd_key_t {
 #endif
   }
 
-  float linear_regression(Array<sample_t, STRIKE_BUF_SIZE> &points) {
+  float linear_regression(vector_t<sample_t, STRIKE_BUF_SIZE> &points) {
     Serial.printf("Have %d datapoints to work with\r\n", points.size());
     // subtract time of the first point, and value of the minimum
     uint32_t min_x = points.back().time;
@@ -395,7 +388,7 @@ struct kbd_key_t {
   }
 
   void process_strike() {
-    Array<sample_t, STRIKE_BUF_SIZE> ar;
+    vector_t<sample_t, STRIKE_BUF_SIZE> ar;
 
     // do this dumbly for now, we can do an iterator or something later
     // if this costs us

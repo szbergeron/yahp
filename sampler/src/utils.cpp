@@ -1,10 +1,17 @@
 #ifndef YAHP_UTILS
 #define YAHP_UTILS
 
-#include "core_pins.h"
 #include <Arduino.h>
+#include "core_pins.h"
 #include <cstdint>
 #include <math.h>
+
+#include <ArduinoJson.hpp>
+#include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
+#include "ArduinoJson/Variant/JsonVariantConst.hpp"
+#include "ArduinoJson/Object/JsonObject.hpp"
+
+using namespace ArduinoJson;
 
 [[gnu::noinline]] [[gnu::cold]] [[gnu::unused]] static void eloop(String s) {
   while (true) {

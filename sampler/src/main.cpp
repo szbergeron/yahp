@@ -1,6 +1,7 @@
 #include "pins_arduino.h"
 #define ENABLE_MIDI
 
+#include "utils.cpp"
 #include "ADC.h"
 #include "core_pins.h"
 #include "usb_midi.h"
@@ -8,7 +9,6 @@
 #include "calibrate.cpp"
 #include "keyboard.cpp"
 #include "sampler2.cpp"
-#include "utils.cpp"
 #include "magnets.cpp"
 #include <algorithm>
 

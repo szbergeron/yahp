@@ -1,12 +1,11 @@
 #include "ADC.h"
-#include "Array.h"
 #include "key.cpp"
 
 #ifndef YAHP_KEYBOARD
 #define YAHP_KEYBOARD
 
 struct keyboard_t {
-  Array<kbd_key_t, KEY_COUNT_MAX> keys;
+  vector_t<kbd_key_t, KEY_COUNT_MAX> keys;
   // why a ptr?
   // we're self referential: keys point to sensors
   // we need the location of sensors to be

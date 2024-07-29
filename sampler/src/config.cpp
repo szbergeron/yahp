@@ -1,12 +1,13 @@
 // #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
 #include "WProgram.h"
 #include "utils.cpp"
+#include "magnets.cpp"
 
 #include "Array.h"
 
-#include <ArduinoJson.hpp>
 #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
 #include "ArduinoJson/Variant/JsonVariantConst.hpp"
+#include <ArduinoJson.hpp>
 
 #include "FS.h"
 #include "wiring.h"
@@ -17,7 +18,6 @@ using namespace ArduinoJson;
 
 #ifndef YAHP_CONFIG
 #define YAHP_CONFIG
-
 
 const int KEYS_PER_BOARD = 16;
 const int NUM_BOARDS = 8;
@@ -60,6 +60,8 @@ struct key_spec_t {
 
   uint8_t midi_note = 0;
   uint8_t midi_channel = 0;
+
+  interpolater_t<MAGNET_INTERPOLATOR_POINTS> curve;
 
   key_spec_t() {}
 
@@ -269,7 +271,7 @@ struct samplerspec_t {
     return d;
   }
 };
-//static uint8_t *JSON_FILE = nullptr;
+// static uint8_t *JSON_FILE = nullptr;
 
 struct keyboardspec_t {
   samplerspec_t sampler;
@@ -331,16 +333,15 @@ struct keyboardspec_t {
 };
 
 static uint8_t KBSPEC_BUF[sizeof(keyboardspec_t)];
-static keyboardspec_t* KBSPEC = nullptr;
-
+static keyboardspec_t *KBSPEC = nullptr;
 
 // I KNOW this is horrible and has memory safety issues.
 // I just am not dealing with that right here, right now
 // NOTE: when this is called, it will destroy any other keyboardspec
 // that it has returned prior! it only maintains one backing buffer
 static keyboardspec_t *yahp_from_sd() {
-    const size_t JSON_FILE_MAX_LENGTH = 32000;
-    char JSON_FILE[JSON_FILE_MAX_LENGTH];
+  const size_t JSON_FILE_MAX_LENGTH = 32000;
+  char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
   if (!SD.exists("config.json")) {
     Serial.println("No config on SD");
@@ -360,11 +361,11 @@ static keyboardspec_t *yahp_from_sd() {
   JsonDocument doc;
   deserializeJson(doc, JSON_FILE);
 
-  if(KBSPEC != nullptr) {
-      KBSPEC->~keyboardspec_t();
+  if (KBSPEC != nullptr) {
+    KBSPEC->~keyboardspec_t();
   }
 
-  keyboardspec_t *kbds = new(KBSPEC_BUF) keyboardspec_t(doc.as<JsonObject>());
+  keyboardspec_t *kbds = new (KBSPEC_BUF) keyboardspec_t(doc.as<JsonObject>());
   KBSPEC = kbds;
 
   // auto p = new (SPEC_ALLOC) keyboardspec_t(std::move(kbds));
@@ -373,17 +374,19 @@ static keyboardspec_t *yahp_from_sd() {
 }
 
 static void yahp_to_sd(keyboardspec_t &kbs) {
-Serial.println("Saving config to sd...");
-  auto d = kbs.to_json();
+  Serial.println("Saving config to sd...");
   String buf;
 
-  //size_t len = 0;
-  //serializeJson();
-  //size_t len = serializeJsonPretty(d, &JSON_FILE, JSON_FILE_MAX_LENGTH - 1);
-  //size_t len = serializeJsonPretty(d, buf, 28000);
-  size_t len = serializeJsonPretty(d, buf);
+  // size_t len = 0;
+  // serializeJson();
+  // size_t len = serializeJsonPretty(d, &JSON_FILE, JSON_FILE_MAX_LENGTH - 1);
+  // size_t len = serializeJsonPretty(d, buf, 28000);
+  {
+    auto d = kbs.to_json();
+    size_t len = serializeJsonPretty(d, buf);
 
-  auto f = SD.open("config.json", FILE_WRITE_BEGIN);
+    auto f = SD.open("config.json", FILE_WRITE_BEGIN);
+  }
 
   f.write(&buf[0], len);
   f.close();

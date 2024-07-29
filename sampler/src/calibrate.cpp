@@ -1,6 +1,7 @@
 #include "avr/pgmspace.h"
 #include "config.cpp"
 #include "key.cpp"
+#include "magnets.cpp"
 #include "pins_arduino.h"
 #include "usb_serial.h"
 #include "utils.cpp"
@@ -23,8 +24,20 @@ void blinkblink() {
   }
 }
 
+struct tempboards_t {
+  Array<uint8_t, NUM_BOARDS> boards;
 
-Array<uint8_t, 16> detect_boards() {
+  tempboards_t(Array<uint8_t, NUM_BOARDS> boards) : boards(boards) {}
+};
+
+struct tempkey_t {
+  uint8_t board;
+  uint8_t pin;
+
+  tempkey_t(uint8_t board, uint8_t pin) : board(board), pin(pin) {}
+};
+
+tempboards_t detect_boards() {
   Serial.println("Getting board info");
   // const size_t LINE_LEN = 256;
   // uint8_t linebuf[LINE_LEN];
@@ -40,7 +53,7 @@ Array<uint8_t, 16> detect_boards() {
 
   Serial.printf("Setting to %d boards\n\r", board_count);
 
-  Array<uint8_t, 16> boards;
+  Array<uint8_t, NUM_BOARDS> boards;
 
   bool sequential = false;
 
@@ -63,10 +76,11 @@ Array<uint8_t, 16> detect_boards() {
     }
   }
 
-  return boards;
+  return {boards};
 }
 
-Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &boards) {
+Array<Array<bool, KEYS_PER_BOARD>, NUM_BOARDS>
+detect_keys(tempboards_t &boards) {
 
   for (size_t i = 0; i < KEYS_PER_BOARD; i++) {
     pinMode(pins[i], INPUT_PULLDOWN);
@@ -85,7 +99,7 @@ Array<Array<bool, KEYS_PER_BOARD>, 16> detect_keys(Array<uint8_t, 16> &boards) {
 
   Array<Array<bool, KEYS_PER_BOARD>, 16> info;
 
-  for (auto &bid : boards) {
+  for (auto &bid : boards.boards) {
     set_board(bid);
     delayMicroseconds(100);
 
@@ -243,8 +257,9 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
   }
 }
 
-keyboardspec_t detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
-                             Array<uint8_t, 16> &boards) {
+keyboardspec_t
+detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
+              tempboards_t &boards) {
 
   Array<boardspec_t, NUM_BOARDS> bspecs;
   Array<key_spec_t, KEYS_PER_BOARD> kspecs;
@@ -257,8 +272,8 @@ keyboardspec_t detect_ranges(Array<Array<bool, KEYS_PER_BOARD>, 16> &keys,
     Serial.println("Keys size is " + String(b.size()));
   }
 
-  for (size_t b = 0; b < boards.size(); b++) {
-    uint8_t bnum = boards[b];
+  for (size_t b = 0; b < boards.boards.size(); b++) {
+    uint8_t bnum = boards.boards[b];
     auto &board_keys = keys.at(b);
     Serial.println("Looking at board " + String(b));
 
@@ -387,6 +402,87 @@ OUT:
       gather_gbl_val("What damper_up point do you want to use?", kc, *sensor);
 
   return gbl;
+}
+
+/*tempboards_t detect_boards2() {
+    for(uint8_t b = 0; b <= 255; b++) {
+        set_board(b);
+        delayMicroseconds(10);
+
+        // first, send a pulse out to bring output high
+        auto pin = pins[0];
+
+        pinMode(pin, OUTPUT);
+        digitalWrite(uint8_t pin, uint8_t val);
+
+    }
+}*/
+
+tempkey_t select_key(tempboards_t &boards) {
+  uint16_t baselines[KEYS_PER_BOARD * boards.boards.size()];
+  for (size_t b = 0; b < boards.boards.size(); b++) {
+    auto bnum = boards.boards[b];
+    set_board(bnum);
+
+    for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
+      auto pin = pins[knum];
+      baselines[knum + (b * KEYS_PER_BOARD)] = analogRead(pin);
+    }
+  }
+
+  Serial.println("Please press the key you want to select");
+
+  for (size_t b = 0; b < boards.boards.size(); b++) {
+    auto bnum = boards.boards[b];
+    set_board(bnum);
+
+    for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
+      auto pin = pins[knum];
+      auto baseline = baselines[knum + (b * KEYS_PER_BOARD)];
+      auto val = analogRead(pin);
+      if (val > baseline + 50) {
+        return tempkey_t(bnum, pin);
+      }
+    }
+  }
+}
+
+keyboardspec_t key_calibration() {
+  auto boards = detect_boards();
+
+  auto keys = detect_keys(boards);
+
+  auto start_midi =
+      prompt_int("What is the lowest midi note on your piano? (Usually the "
+                 "minimum on an 88 key keyboard is 21)",
+                 0, 127, 45);
+
+  auto num_keys = prompt_int("How many keys does your piano have?", 0,
+                             127 - start_midi, min(88, 127 - start_midi));
+
+  for (uint8_t midi_num = start_midi; midi_num < midi_num + num_keys;
+       midi_num++) {
+    auto n = format_note(midi_num);
+    Serial.printf("Configuring note %s (midi id %d)\r\n", n.c_str(),
+                  (int)midi_num);
+    bool in_use = confirm("Configure this key?", true);
+    if (!in_use) {
+      continue;
+    }
+
+    Serial.printf("Please press %s on your piano\r\n", n.c_str());
+    auto sensor = select_key(boards);
+
+    Serial.printf("Key %s is assigned pin %d on board %d\r\n", n.c_str(),
+                  (int)sensor.pin, (int)sensor.board);
+
+
+    auto interpolator = drop_test(sensor.board, sensor.pin);
+
+    //
+  }
+
+  //
 }
 
 keyboardspec_t run_calibration() {

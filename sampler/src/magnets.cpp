@@ -1,8 +1,23 @@
+#include "Array.h"
+
+#include "ArduinoJson/Object/JsonObject.hpp"
+#include "ArduinoJson/Document/JsonDocument.hpp"
+#include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
+#include "ArduinoJson/Variant/JsonVariantConst.hpp"
+#include <ArduinoJson.hpp>
+
 #include "core_pins.h"
 #include "elapsedMillis.h"
-#include "sampler2.cpp"
+//#include "sampler2.cpp"
 #include "utils.cpp"
 #include <cstddef>
+
+#ifndef YAHP_MAGNETS
+#define YAHP_MAGNETS
+
+using namespace ArduinoJson;
+
+const size_t MAGNET_INTERPOLATOR_POINTS = 16;
 
 struct longsample_t {
   float value;
@@ -16,13 +31,15 @@ struct point_t {
   float x;
   float y;
 
-  point_t(float x, float y): x(x), y(y) {}
+  point_t(JsonObject j) : x(j["x"]), y(j["y"]) {}
+
+  JsonDocument to_json() { JsonDocument j; }
+
+  point_t(float x, float y) : x(x), y(y) {}
 };
 
-
-
 template <uint32_t POINTS> struct interpolater_t {
-  //point_t points[POINTS];
+  // point_t points[POINTS];
   Array<point_t, POINTS> points;
 
   inline float interpolate(float x) {
@@ -66,40 +83,69 @@ template <uint32_t POINTS> struct interpolater_t {
 
   template <uint32_t INPUT_POINTS>
   interpolater_t(Array<point_t, INPUT_POINTS> inputs) {
-      Array<point_t, INPUT_POINTS> sorted;
+    Array<point_t, INPUT_POINTS> sorted;
 
-      // first, sort it by x
-      for(int i = 0; i < inputs.size(); i++) {
-          for(int j = i + 1; i < inputs.size(); j++) {
-              auto p_a = inputs[i];
-              auto p_b = inputs[j];
+    // first, sort it by x
+    for (int i = 0; i < inputs.size(); i++) {
+      for (int j = i + 1; i < inputs.size(); j++) {
+        auto p_a = inputs[i];
+        auto p_b = inputs[j];
 
-              if(p_a.x > p_b.x) {
-                  inputs[i] = p_b;
-                  inputs[j] = p_a;
-              }
-          }
+        if (p_a.x > p_b.x) {
+          inputs[i] = p_b;
+          inputs[j] = p_a;
+        }
+      }
+    }
+
+    // now, split into ranges
+    size_t stride = inputs.size() / POINTS;
+
+    for (size_t range_start; range_start < inputs.size();
+         range_start += stride) {
+      size_t count = 0;
+      float sum_x = 0;
+      float sum_y = 0;
+      for (size_t i = range_start;
+           i < inputs.size() && i < range_start + stride; i++) {
+        count++;
+        auto p = inputs[i];
+        sum_x += p.x;
+        sum_y += p.y;
       }
 
-      // now, split into ranges
-      size_t stride = inputs.size() / POINTS;
+      float x = sum_x / count;
+      float y = sum_y / count;
 
-      for(size_t range_start; range_start < inputs.size(); range_start += stride) {
-          size_t count = 0;
-          float sum_x = 0;
-          float sum_y = 0;
-          for(size_t i = range_start; i < inputs.size() && i < range_start + stride; i++) {
-              count++;
-              auto p = inputs[i];
-              sum_x += p.x;
-              sum_y += p.y;
-          }
+      this->points.push_back({x, y});
+    }
+  }
 
-          float x = sum_x / count;
-          float y = sum_y / count;
+    // A very basic "default constructed" interpolater
+    // that pretty much barely works
+  interpolater_t(float min, float max) {
+      this->points.push_back(point_t(min, 0));
+      this->points.push_back(point_t(max, 1));
+  }
 
-          this->points.push_back({ x, y });
-      }
+  interpolater_t(JsonObject j) {
+    auto ja = j.as<JsonArray>();
+
+    for (auto ent : ja) {
+      this->points.push_back(point_t(ent.as<JsonObject>()));
+    }
+  }
+
+  JsonDocument to_json() {
+    JsonDocument d;
+
+    d["sensor_id"] = this->sensor_id;
+    d["max_val"] = this->max_val;
+    d["min_val"] = this->min_val;
+    d["midi_note"] = this->midi_note;
+    d["midi_channel"] = this->midi_channel;
+
+    return d;
   }
 };
 
@@ -161,7 +207,7 @@ struct magnetic_compensator {
   float sensor_absolute_max;
 };*/
 
-template <uint32_t BUFSIZE = SAMPLE_BUFFER_LENGTH> struct longsample_buf_t {
+template <uint32_t BUFSIZE> struct longsample_buf_t {
   longsample_t buffer[BUFSIZE];
 
   // begin points at the newest sample,
@@ -289,11 +335,18 @@ struct position_t {
     //float lra = linear_regression(before);
 }*/
 
-static void drop_test(uint8_t bnum, uint8_t pin) {
+static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
+                                                            uint8_t pin) {
+
+  Serial.println("This step calibrates the native hammer range,");
+  Serial.println("as well as the voltage response curve with respect to "
+                 "distance of the sensors");
+
   set_board(bnum);
   delayMicroseconds(10);
   analogReadAveraging(16);
   analogReadResolution(10);
+  pinMode(pin, INPUT);
 
   // first collect the down position,
   // to serve as a reference point for middle-crossing
@@ -302,6 +355,8 @@ static void drop_test(uint8_t bnum, uint8_t pin) {
 
   Serial.println("Now lift the hammer, until you can feel it pressing on the "
                  "felt but without too much effort");
+  Serial.println("Don't try to deform the felt--when the hammer drops, it "
+                 "should not be accelerated by the felt");
   Serial.println("You can release the hammer once you've done so, and then "
                  "press the enter key");
   Serial.clear();
@@ -459,3 +514,5 @@ static void drop_test(uint8_t bnum, uint8_t pin) {
   // flux density follows the inverse-cube law
   //
 }
+
+#endif

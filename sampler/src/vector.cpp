@@ -3,6 +3,7 @@
 
 #include <cstddef>
 #include "utils.cpp"
+#include "result.h"
 #include "unit.h"
 
 template<typename T, size_t MAX_LEN>
@@ -39,6 +40,12 @@ struct vector_t {
 
 
         result_t<T, unit_t> pop_back() {
+            if(this->cur_len > 0) {
+                this->cur_len--;
+
+                T v = this->elements[this->cur_len].some;
+                this->elements[this->cur_len]
+            }
         }
 };
 

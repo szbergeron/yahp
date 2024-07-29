@@ -17,24 +17,31 @@ static const uint32_t SETTLE_DELAY_MS = 60;
 
 struct key_calibration_t {
   key_spec_t spec;
+  interpolater_t<MAGNET_INTERPOLATOR_POINTS> interpolater;
 
   // all of these are normalized to
   // ideally fall within a 0-1 range,
   // though values outside of that
   // range are also completely allowed
 
-  inline float normalize_sample(uint16_t sample) {
+  /*inline float normalize_sample(uint16_t sample) {
     float as_f = sample;
 
     float normalized =
         (as_f - this->spec.min_val) / (this->spec.max_val - this->spec.min_val);
 
     return normalized;
+  }*/
+
+  inline float map(uint16_t raw_val) {
+      float linear_distance = this->interpolater.interpolate(raw_val);
+
+      return linear_distance;
   }
 
   //
 
-  inline void verify_states(global_key_config_t &gbl) {
+  /*inline void verify_states(global_key_config_t &gbl) {
     if (gbl.active > gbl.damper_down) {
       Serial.printf("active %f is greater than dd %f\n", gbl.active,
                     gbl.damper_down);
@@ -64,7 +71,7 @@ struct key_calibration_t {
       Serial.printf("letoff %f is greater than strike %f\n", gbl.active,
                     gbl.damper_down);
     }
-  }
+  }*/
 
   key_calibration_t(key_spec_t &spec) : spec(spec) {}
 

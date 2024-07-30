@@ -115,10 +115,6 @@ void configure_adc() {
   }
 }
 
-void doReboot() { SCB_AIRCR = 0x05FA0004; }
-
-// static ADC adc();
-
 void setup() {
   for (int i = 0; i < 3; i++) {
     delay(700);
@@ -130,7 +126,6 @@ void setup() {
 
   Serial.println("Begin setup");
 
-  // Serial.setTimeout(100000);
   pinMode(LED_BUILTIN, OUTPUT);
 
   if (!SD.begin(BUILTIN_SDCARD)) {
@@ -138,43 +133,17 @@ void setup() {
     eloop("failed to setup sdcard");
   }
 
-  // delay(5000);
   Serial.println("Setting up...");
-  auto spec = yahp_from_sd();
-  // spec = nullptr;
-
-  Serial.println("Tried load from sd");
-
-  // make one to save there instead
-  if (spec == nullptr) {
-    // need to make a new config
-    Serial.println("no config exists, making a new one");
-    auto cfgv = run_calibration();
-    yahp_to_sd(cfgv);
-
-    // come back through and load it
-    doReboot();
-  }
-
-  /*spec = yahp_from_sd();
-
-  Serial.println("Loaded a final");
-
-  if (spec == nullptr) {
-    eloop("something is horribly wrong with the SD card!");
-  }*/
+  fullspec_t spec = get_spec();
 
   Serial.println("Making adc/sampler/keyboard...");
   ADC adc;
 
-  // SAMPLER = sampler_t(adc, spec->sampler);
-  // SAMPLER{adc, spec->sampler};
-  SAMPLER = new (SAMPLER_BUF) sampler_t(adc, spec->sampler);
+  SAMPLER = new (SAMPLER_BUF) sampler_t(adc, spec.keyboard.sampler);
 
   Serial.println("Made sampler");
 
-  // KEYBOARD = new keyboard_t(*spec, SAMPLER);
-  KEYBOARD = new (KEYBOARD_BUF) keyboard_t(spec, SAMPLER, spec->gbl);
+  KEYBOARD = new (KEYBOARD_BUF) keyboard_t(spec, SAMPLER, spec.global);
 
   IDLER = new (IDLER_BUF) idler_t(KEYBOARD);
 

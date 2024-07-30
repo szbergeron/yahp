@@ -10,8 +10,11 @@
 #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
 #include "ArduinoJson/Variant/JsonVariantConst.hpp"
 #include "ArduinoJson/Object/JsonObject.hpp"
+#include "ArduinoJson/Array/JsonArray.hpp"
 
 using namespace ArduinoJson;
+
+void doReboot() { SCB_AIRCR = 0x05FA0004; }
 
 [[gnu::noinline]] [[gnu::cold]] [[gnu::unused]] static void eloop(String s) {
   while (true) {

@@ -6,6 +6,9 @@
 #include "usb_serial.h"
 #include "utils.cpp"
 
+#include "ArduinoJson/Document/JsonDocument.hpp"
+#include "ArduinoJson/Object/JsonObject.hpp"
+
 #include "core_pins.h"
 #include "elapsedMillis.h"
 #include <cstddef>
@@ -146,7 +149,7 @@ detect_keys(tempboards_t &boards) {
   return info;
 }
 
-key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
+/*key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
                         uint32_t sensor_id) {
   set_board(board_num);
   analogReadResolution(10);
@@ -253,7 +256,7 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
     Serial.println("Saving...");
     return key_spec_t(sensor_id, min, max, midi_num);
   }
-}
+}*/
 
 /*keyboardspec_t
 detect_ranges(vector_t<vector_t<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
@@ -475,7 +478,7 @@ keyboardspec_t key_calibration() {
                   (int)sensor.pin, (int)sensor.board);
 
 
-    auto interpolator = drop_test(sensor.board, sensor.pin);
+    auto curve_points = drop_test(sensor.board, sensor.pin);
 
     //
   }
@@ -483,25 +486,75 @@ keyboardspec_t key_calibration() {
   //
 }
 
-keyboardspec_t run_calibration() {
-  Serial.println("Beginning calibration");
+result_t<JsonDocument, unit_t> json_from_sd(const char *name) {
+  const size_t JSON_FILE_MAX_LENGTH = 32000;
+  char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
-  auto boards = detect_boards();
-
-  auto keys = detect_keys(boards);
-
-  for (auto &b : keys) {
-    Serial.printf("Found count %d\r\n", b.size());
+  if (!SD.exists(name)) {
+    Serial.println("No config on SD");
+    return result_t<JsonDocument, unit_t>::err({});
   }
 
-  Serial.println("Calibrating minimum and maximum values");
+  auto f = SD.open(name, FILE_READ);
 
-  // auto specs = detect_ranges({}, {});
-  auto specs = detect_ranges(keys, boards);
+  size_t file_size = 0;
 
-  specs.gbl = gbl_config(specs);
+  file_size = f.readBytes(JSON_FILE, JSON_FILE_MAX_LENGTH);
 
-  return specs;
+  JSON_FILE[file_size] = 0; // null term
+
+  f.close();
+
+  JsonDocument doc;
+  deserializeJson(doc, JSON_FILE);
+
+  return result_t<JsonDocument, unit_t>::ok(doc);
+}
+
+void json_to_sd(const char *name, JsonDocument doc) {
+  Serial.println("Saving config to sd...");
+  String buf;
+  size_t len = serializeJsonPretty(doc, buf);
+  auto f = SD.open(name, FILE_WRITE_BEGIN);
+  f.write(&buf[0], len);
+  f.close();
+}
+
+static fullspec_t get_spec() {
+  keyboardspec_t s;
+  {
+    auto r = json_from_sd("calibration.json");
+    if (r.is_ok()) {
+      // we already have sampler then
+      s = keyboardspec_t(r.unwrap().as<JsonObject>());
+      //
+    } else {
+      s = key_calibration();
+      json_to_sd("calibration.json", s.to_json());
+
+      // come back through now
+      // with a fresh heap, and sane everything
+      doReboot();
+    }
+  }
+
+  global_key_config_t gbl;
+  {
+    auto r2 = json_from_sd("global.json");
+    if (r2.is_ok()) {
+      // return samplerspec_t(r.unwrap().as<JsonObject>());
+      gbl = global_key_config_t(r2.unwrap().as<JsonObject>());
+    } else {
+      gbl = gbl_config(s);
+      json_to_sd("global.json", gbl.to_json());
+
+      // fresh heap, uniform flow
+      // (always want to return based on value of load)
+      doReboot();
+    }
+  }
+
+  return fullspec_t(s, gbl);
 }
 
 #endif

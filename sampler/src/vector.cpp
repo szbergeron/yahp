@@ -1,6 +1,7 @@
 #ifndef YAHP_VECTOR
 #define YAHP_VECTOR
 
+#include "ArduinoJson/Document/JsonDocument.hpp"
 #include "result.h"
 #include "unit.h"
 #include "utils.cpp"
@@ -8,12 +9,10 @@
 
 template <typename T> class vector_iterator_t {
 public:
-  vector_iterator_t(T *values_ptr) : values_ptr_{values_ptr}, position_{0} {
-  }
+  vector_iterator_t(T *values_ptr) : values_ptr_{values_ptr}, position_{0} {}
 
   vector_iterator_t(T *values_ptr, size_t size)
-      : values_ptr_{values_ptr}, position_{size} {
-      }
+      : values_ptr_{values_ptr}, position_{size} {}
 
   bool operator!=(const vector_iterator_t<T> &other) const {
     return !(*this == other);
@@ -40,8 +39,8 @@ private:
   union elem {
     T some;
     unit_t none;
-    
-    elem(): none() {}
+
+    elem() : none() {}
 
     ~elem() {}
   };
@@ -65,9 +64,7 @@ public:
     }
   }
 
-  T& operator[](size_t idx) {
-      return this->at(idx);
-  }
+  T &operator[](size_t idx) { return this->at(idx); }
 
   /*result_t<T&, unit_t> at(size_t idx) {
   }*/
@@ -88,20 +85,14 @@ public:
 
   bool full() { return this->size() == MAX_LEN; }
 
-  T &back() {
-      return this->at(this->cur_len - 1);
-  }
+  T &back() { return this->at(this->cur_len - 1); }
 
-  T &start() {
-      return this->at(0);
-  }
+  T &start() { return this->at(0); }
 
-  iterator begin() {
-      return iterator(reinterpret_cast<T*>(this->elements));
-  }
+  iterator begin() { return iterator(reinterpret_cast<T *>(this->elements)); }
 
   iterator end() {
-      return iterator(reinterpret_cast<T*>(this->elements), MAX_LEN);
+    return iterator(reinterpret_cast<T *>(this->elements), MAX_LEN);
   }
 
   result_t<T, unit_t> pop_back() {
@@ -121,15 +112,28 @@ public:
     }
   }
 
-  vector_t(): cur_len(0) {
+  JsonDocument to_json() {
+    JsonDocument di;
+
+    auto a = di.to<JsonArray>();
+
+    for (auto ent : *this) {
+      a.add(ent.to_json());
+    }
+
+    return di;
   }
-  
-  vector_t(JsonArray ja): cur_len(0) {
-    for(auto ent: ja) {
-        auto v = T::from_json(ent);
-        this->push_back(v);
+
+  vector_t() : cur_len(0) {}
+
+  vector_t(JsonArray ja) : cur_len(0) {
+    for (auto ent : ja) {
+      auto v = T::from_json(ent);
+      this->push_back(v);
     }
   }
+
+  vector_t(JsonVariant& jv) : vector_t(jv.as<JsonArray>()) {}
 };
 
 #endif

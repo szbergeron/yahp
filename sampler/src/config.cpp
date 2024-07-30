@@ -1,8 +1,9 @@
 // #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
+#include "ArduinoJson/Document/JsonDocument.hpp"
 #include "WProgram.h"
+#include "magnets.cpp"
 #include "unit.h"
 #include "utils.cpp"
-#include "magnets.cpp"
 
 #include "FS.h"
 #include "wiring.h"
@@ -180,13 +181,14 @@ struct sensorspec_t {
 
   sensorspec_t() {}
 
-  sensorspec_t(uint32_t sensor_id, uint8_t pin_num, vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve)
+  sensorspec_t(uint32_t sensor_id, uint8_t pin_num,
+               vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve)
       : pin_num(pin_num), sensor_id(sensor_id), curve(curve) {}
 
   sensorspec_t(JsonObject j)
       : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]), curve(j["curve"]) {}
 
-  sensorspec_t(JsonVariant jv): sensorspec_t(jv.as<JsonObject>()) {}
+  sensorspec_t(JsonVariant jv) : sensorspec_t(jv.as<JsonObject>()) {}
 
   JsonDocument to_json() {
     JsonDocument d;
@@ -241,16 +243,16 @@ struct samplerspec_t {
 
   samplerspec_t() {}
 
-  result_t<sensorspec_t*, unit_t> find_sensor(size_t sid) {
-      for(auto& board: this->boards) {
-          for(auto& sensor: board.sensors) {
-              if(sensor.sensor_id == sid) {
-                  return result_t::ok(&sensor);
-              }
-          }
+  result_t<sensorspec_t *, unit_t> find_sensor(size_t sid) {
+    for (auto &board : this->boards) {
+      for (auto &sensor : board.sensors) {
+        if (sensor.sensor_id == sid) {
+          return result_t::ok(&sensor);
+        }
       }
+    }
 
-      return result_t::err({});
+    return result_t::err({});
   }
 
   samplerspec_t(JsonObject j) {
@@ -279,16 +281,13 @@ struct samplerspec_t {
 };
 
 struct keyboardspec_t {
-  samplerspec_t sampler;
-
   vector_t<key_spec_t, KEY_COUNT_MAX> keys;
   vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals;
 
-  global_key_config_t gbl;
-
   keyboardspec_t() {}
 
-  keyboardspec_t(samplerspec_t sampler, vector_t<key_spec_t, KEY_COUNT_MAX> keys,
+  keyboardspec_t(samplerspec_t sampler,
+                 vector_t<key_spec_t, KEY_COUNT_MAX> keys,
                  vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals)
       : sampler(sampler), keys(keys), pedals(pedals) {}
 
@@ -330,21 +329,52 @@ struct keyboardspec_t {
 
     d["keys"] = kja;
     d["pedals"] = pja;
-    d["sampler"] = this->sampler.to_json();
-    d["global"] = this->gbl.to_json();
+    //d["sampler"] = this->sampler.to_json();
+    //d["global"] = this->gbl.to_json();
 
     return d;
   }
 };
 
+struct fullspec_t {
+    keyboardspec_t keyboard;
+    global_key_config_t global;
+    samplerspec_t sampler;
+}
+
 static uint8_t KBSPEC_BUF[sizeof(keyboardspec_t)];
 static keyboardspec_t *KBSPEC = nullptr;
+
+result_t<JsonDocument, unit_t> json_from_sd(const char* name) {
+  const size_t JSON_FILE_MAX_LENGTH = 32000;
+  char JSON_FILE[JSON_FILE_MAX_LENGTH];
+
+  if (!SD.exists(name)) {
+    Serial.println("No config on SD");
+    return result_t::err({});
+  }
+
+  auto f = SD.open(name, FILE_READ);
+
+  size_t file_size = 0;
+
+  file_size = f.readBytes(JSON_FILE, JSON_FILE_MAX_LENGTH);
+
+  JSON_FILE[file_size] = 0; // null term
+
+  f.close();
+
+  JsonDocument doc;
+  deserializeJson(doc, JSON_FILE);
+
+  return result_t::ok(doc);
+}
 
 // I KNOW this is horrible and has memory safety issues.
 // I just am not dealing with that right here, right now
 // NOTE: when this is called, it will destroy any other keyboardspec
 // that it has returned prior! it only maintains one backing buffer
-static keyboardspec_t *yahp_from_sd() {
+static fullspec_t yahp_from_sd() {
   const size_t JSON_FILE_MAX_LENGTH = 32000;
   char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
@@ -378,7 +408,7 @@ static keyboardspec_t *yahp_from_sd() {
   return kbds;
 }
 
-static void yahp_to_sd(keyboardspec_t &kbs) {
+static void yahp_to_sd(fullspec_t &kbs) {
   Serial.println("Saving config to sd...");
   String buf;
 
@@ -387,14 +417,32 @@ static void yahp_to_sd(keyboardspec_t &kbs) {
   // size_t len = serializeJsonPretty(d, &JSON_FILE, JSON_FILE_MAX_LENGTH - 1);
   // size_t len = serializeJsonPretty(d, buf, 28000);
   {
-    auto d = kbs.to_json();
+    auto d = kbs.global.to_json();
     size_t len = serializeJsonPretty(d, buf);
 
-    auto f = SD.open("config.json", FILE_WRITE_BEGIN);
+    auto f = SD.open("global.json", FILE_WRITE_BEGIN);
+    f.write(&buf[0], len);
+    f.close();
   }
 
-  f.write(&buf[0], len);
-  f.close();
+  {
+    auto d = kbs.keyboard.to_json();
+    size_t len = serializeJsonPretty(d, buf);
+
+    auto f = SD.open("keyboard.json", FILE_WRITE_BEGIN);
+    f.write(&buf[0], len);
+    f.close();
+  }
+
+  {
+    auto d = kbs.sampler.to_json();
+    size_t len = serializeJsonPretty(d, buf);
+
+    auto f = SD.open("sampler.json", FILE_WRITE_BEGIN);
+    f.write(&buf[0], len);
+    f.close();
+  }
+
   Serial.println("Done!");
 }
 

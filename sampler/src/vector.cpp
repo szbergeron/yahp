@@ -123,6 +123,13 @@ public:
 
   vector_t(): cur_len(0) {
   }
+  
+  vector_t(JsonArray ja): cur_len(0) {
+    for(auto ent: ja) {
+        auto v = T::from_json(ent);
+        this->push_back(v);
+    }
+  }
 };
 
 #endif

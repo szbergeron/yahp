@@ -1,10 +1,9 @@
 #include "utils.cpp"
 
-
 #include "core_pins.h"
 #include "elapsedMillis.h"
-#include <cstddef>
 #include "vector.cpp"
+#include <cstddef>
 
 #ifndef YAHP_MAGNETS
 #define YAHP_MAGNETS
@@ -24,6 +23,7 @@ struct point_t {
   float y;
 
   point_t(JsonObject j) : x(j["x"]), y(j["y"]) {}
+  point_t(JsonVariant j) : point_t(j.as<JsonObject>()) {}
 
   JsonDocument to_json() { JsonDocument j; }
 
@@ -113,11 +113,11 @@ template <uint32_t POINTS> struct interpolater_t {
     }
   }
 
-    // A very basic "default constructed" interpolater
-    // that pretty much barely works
+  // A very basic "default constructed" interpolater
+  // that pretty much barely works
   interpolater_t(float min, float max) {
-      this->points.push_back(point_t(min, 0));
-      this->points.push_back(point_t(max, 1));
+    this->points.push_back(point_t(min, 0));
+    this->points.push_back(point_t(max, 1));
   }
 
   interpolater_t(JsonArray j) {

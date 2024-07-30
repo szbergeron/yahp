@@ -1,5 +1,6 @@
 #include "ADC.h"
 #include "key.cpp"
+#include "utils.cpp"
 
 #ifndef YAHP_KEYBOARD
 #define YAHP_KEYBOARD
@@ -16,6 +17,8 @@ struct keyboard_t {
 
   keyboard_t(keyboardspec_t *spec, sampler_t *sampler, global_key_config_t gbl)
       : sampler(sampler), gbl(gbl) {
+          spec->sampler;
+
     // I am not going to put in the effort to make this fast,
     // it runs like once or twice and only during setup
 
@@ -28,7 +31,9 @@ struct keyboard_t {
         eloop(String("no sensor by this ID was found: ") + ks.sensor_id);
       }
 
-      key_calibration_t calibration(ks);
+      auto sensorspec = spec->sampler.find_sensor(ks.sensor_id).unwrap();
+
+      key_calibration_t calibration(ks, *sensorspec);
 
       kbd_key_t key(sensor, calibration, gbl);
 

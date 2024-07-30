@@ -255,7 +255,7 @@ key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
   }
 }
 
-keyboardspec_t
+/*keyboardspec_t
 detect_ranges(vector_t<vector_t<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
               tempboards_t &boards) {
 
@@ -314,7 +314,7 @@ detect_ranges(vector_t<vector_t<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
   keyboardspec_t k(s, kspecs, {});
 
   return k;
-}
+}*/
 
 float gather_gbl_val(String msg, key_calibration_t &kc, sensorspec_t &ssp) {
   Serial.println(msg);
@@ -326,7 +326,7 @@ float gather_gbl_val(String msg, key_calibration_t &kc, sensorspec_t &ssp) {
     }
 
     auto v = analogRead(ssp.pin_num);
-    float normal = kc.normalize_sample(v);
+    float normal = kc.map(v);
 
     Serial.print("\r");
     for (int i = 0; i < 12; i++) {
@@ -379,7 +379,7 @@ OUT:
   }
 
   // now, figure out detect range
-  auto kc = key_calibration_t(*key);
+  auto kc = key_calibration_t(*key, *sensor);
 
   set_board(board->board_num);
   delay(3);

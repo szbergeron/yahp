@@ -72,7 +72,7 @@ struct key_calibration_t {
     }
   }*/
 
-  key_calibration_t(key_spec_t &spec) : spec(spec) {}
+  key_calibration_t(key_spec_t &spec, sensorspec_t &sspec) : spec(spec), interpolater(sspec.curve) {}
 };
 
 struct kbd_key_t {
@@ -133,7 +133,7 @@ struct kbd_key_t {
     auto &c = this->calibration;
     auto &g = this->global_key_config;
 
-    auto normalized = c.normalize_sample(sample.value);
+    auto normalized = c.map(sample.value);
     if (false) {
       Serial.println("Normalized: " + String(normalized) + " for note " +
                      this->fmt_note());
@@ -202,7 +202,7 @@ struct kbd_key_t {
 
     this->sensor->buf.unackd = 0;
     sample_t latest = this->sensor->buf.latest();
-    float value = this->calibration.normalize_sample(latest.value);
+    float value = this->calibration.map(latest.value);
 
     switch (this->kstate) {
     case key_state_e::KEY_RESTING:
@@ -363,7 +363,7 @@ struct kbd_key_t {
     for (auto point : points) {
       float x = (point.time - min_x);
       // float y = (point.value - min_val);
-      float y = this->calibration.normalize_sample(point.value);
+      float y = this->calibration.map(point.value);
       // print_normalized(y);
       Serial.printf("%f @ %f\r\n", y, x);
       // Serial.flush();

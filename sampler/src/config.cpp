@@ -1,5 +1,6 @@
 // #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
 #include "WProgram.h"
+#include "unit.h"
 #include "utils.cpp"
 #include "magnets.cpp"
 
@@ -52,8 +53,6 @@ struct key_spec_t {
 
   uint8_t midi_note = 0;
   uint8_t midi_channel = 0;
-
-  interpolater_t<MAGNET_INTERPOLATOR_POINTS> curve;
 
   key_spec_t() {}
 
@@ -175,16 +174,19 @@ struct pedal_spec_t {
 
 struct sensorspec_t {
   uint8_t pin_num = 0;
+  vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve;
 
   uint32_t sensor_id = 0;
 
   sensorspec_t() {}
 
-  sensorspec_t(uint32_t sensor_id, uint8_t pin_num)
-      : pin_num(pin_num), sensor_id(sensor_id) {}
+  sensorspec_t(uint32_t sensor_id, uint8_t pin_num, vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve)
+      : pin_num(pin_num), sensor_id(sensor_id), curve(curve) {}
 
   sensorspec_t(JsonObject j)
-      : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]) {}
+      : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]), curve(j["curve"]) {}
+
+  sensorspec_t(JsonVariant jv): sensorspec_t(jv.as<JsonObject>()) {}
 
   JsonDocument to_json() {
     JsonDocument d;
@@ -239,6 +241,18 @@ struct samplerspec_t {
 
   samplerspec_t() {}
 
+  result_t<sensorspec_t*, unit_t> find_sensor(size_t sid) {
+      for(auto& board: this->boards) {
+          for(auto& sensor: board.sensors) {
+              if(sensor.sensor_id == sid) {
+                  return result_t::ok(&sensor);
+              }
+          }
+      }
+
+      return result_t::err({});
+  }
+
   samplerspec_t(JsonObject j) {
     auto ja = j["boards"].as<JsonArray>();
 
@@ -263,7 +277,6 @@ struct samplerspec_t {
     return d;
   }
 };
-// static uint8_t *JSON_FILE = nullptr;
 
 struct keyboardspec_t {
   samplerspec_t sampler;

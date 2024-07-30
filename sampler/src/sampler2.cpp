@@ -29,15 +29,6 @@ struct sample_t {
 
   uint16_t value;
   uint32_t time;
-  // uint16_t time_l;
-  // uint16_t time_h; // NOTE: this can WRAP! Only use this in comparison with
-  // "near" samples
-
-  /*uint32_t time() {
-      //uint32_t h = this->time_h;
-      //uint32_t l = this->time_l;
-      //return (h << 16) + l;
-  }*/
 
   sample_t(uint16_t value, uint32_t time) : value(value), time(time) {}
 
@@ -285,19 +276,15 @@ struct board_t {
 
     while (!for_a.empty() || !for_b.empty() || !for_both.empty()) {
       if (!for_a.empty()) {
-        a = for_a.back();
-        for_a.pop_back().unwrap();
+        a = for_a.pop_back().unwrap();
       } else if (!for_both.empty()) {
-        a = for_both.back();
-        for_both.pop_back().unwrap();
+        a = for_both.pop_back().unwrap();
       }
 
       if (!for_b.empty()) {
-        b = for_b.back();
-        for_b.pop_back().unwrap();
+        b = for_b.pop_back().unwrap();
       } else if (!for_both.empty()) {
-        b = for_both.back();
-        for_both.pop_back().unwrap();
+        b = for_both.pop_back().unwrap();
       }
 
       uint32_t ts_a;

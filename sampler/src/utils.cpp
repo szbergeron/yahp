@@ -295,7 +295,6 @@ bool confirm(String message, bool default_val) {
 
 int32_t prompt_int(String message, int32_t min, int32_t max,
                    int32_t default_val) {
-  int32_t val = default_val;
   while (true) {
     Serial.print(message + " [" + default_val + "]: ");
 
@@ -322,7 +321,6 @@ int32_t prompt_int(String message, int32_t min, int32_t max,
 }
 
 float prompt_float(String message, float min, float max, float default_val) {
-  int32_t val = default_val;
   while (true) {
     Serial.print(message + " [" + default_val + "]: ");
 

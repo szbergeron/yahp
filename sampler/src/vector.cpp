@@ -1,7 +1,9 @@
 #ifndef YAHP_VECTOR
 #define YAHP_VECTOR
 
+#include "ArduinoJson/Array/JsonArrayConst.hpp"
 #include "ArduinoJson/Document/JsonDocument.hpp"
+#include "ArduinoJson/Variant/JsonVariantConst.hpp"
 #include "result.h"
 #include "unit.h"
 #include "utils.cpp"
@@ -56,9 +58,8 @@ public:
       Serial.println("exceeded vec len");
       return false;
     } else {
-      this->cur_len++;
-
       this->elements[this->cur_len].some = v;
+      this->cur_len++;
 
       return true;
     }
@@ -71,6 +72,8 @@ public:
 
   T &at(size_t idx) {
     if (idx >= this->cur_len) [[unlikely]] {
+      Serial.printf("Tried to index to %d within a vec of size %d\r\n", idx,
+                    this->cur_len);
       eloop("idx out of range");
     }
 
@@ -100,7 +103,8 @@ public:
       this->cur_len--;
 
       T v = this->elements[this->cur_len].some;
-      return result_t<T, unit_t>::ok(this->elements[this->cur_len].some);
+
+      return result_t<T, unit_t>::ok(v);
     } else {
       return result_t<T, unit_t>::err({});
     }
@@ -128,12 +132,17 @@ public:
 
   vector_t(JsonArray ja) : cur_len(0) {
     for (auto ent : ja) {
-      auto v = T::from_json(ent);
+      auto v = T(ent);
       this->push_back(v);
     }
   }
 
-  vector_t(JsonVariant& jv) : vector_t(jv.as<JsonArray>()) {}
+  vector_t(JsonArrayConst ja) : cur_len(0) {
+    for (auto ent : ja) {
+      auto v = T::from_json(ent);
+      this->push_back(v);
+    }
+  }
 };
 
 #endif

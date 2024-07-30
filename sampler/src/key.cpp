@@ -159,7 +159,7 @@ struct kbd_key_t {
       ds = damper_state_e::DAMPER_DOWN;
       if (this->dstate == damper_state_e::DAMPER_UP) {
         Serial.printf("Transitions with an absolute of %d and min %d\r\n",
-                      sample.value, this->calibration.spec.min_val);
+                      sample.value);
         Serial.printf("Transitions with a normal of %f\r\n",
                       normalized); // + String(normalized));
       }
@@ -324,7 +324,7 @@ struct kbd_key_t {
     // usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
     auto note = this->calibration.spec.midi_note + 30;
     auto channel = this->calibration.spec.midi_channel;
-    usbMIDI.sendAfterTouchPoly(note, 127, 1);
+    usbMIDI.sendAfterTouchPoly(note, 127, channel);
 #endif
   }
 
@@ -337,7 +337,7 @@ struct kbd_key_t {
 #if defined(ENABLE_MIDI)
     auto note = this->calibration.spec.midi_note + 30;
     auto channel = this->calibration.spec.midi_channel;
-    usbMIDI.sendNoteOff(note, 127, 1);
+    usbMIDI.sendNoteOff(note, 127, channel);
     // usbMIDI.send_now();
 #endif
   }
@@ -414,7 +414,7 @@ struct kbd_key_t {
     Serial.println("normalized was " + String(normalized_velocity));
     Serial.println("Sends velocity: " + String(midi_velocity));
     Serial.println("Sent note on! Channel: " + String(channel));
-    usbMIDI.sendNoteOn(note, midi_velocity, 1);
+    usbMIDI.sendNoteOn(note, midi_velocity, channel);
 #endif
   }
 

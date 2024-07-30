@@ -25,7 +25,12 @@ struct point_t {
   point_t(JsonObject j) : x(j["x"]), y(j["y"]) {}
   point_t(JsonVariant j) : point_t(j.as<JsonObject>()) {}
 
-  JsonDocument to_json() { JsonDocument j; }
+  JsonDocument to_json() {
+    JsonDocument j;
+    j["x"] = this->x;
+    j["y"] = this->y;
+    return j;
+  }
 
   point_t(float x, float y) : x(x), y(y) {}
 };
@@ -35,7 +40,7 @@ template <uint32_t POINTS> struct interpolater_t {
   vector_t<point_t, POINTS> points;
 
   inline float interpolate(float x) {
-    int idx = 0;
+    uint32_t idx = 0;
     for (; idx < POINTS; idx++) {
       if (this->points[idx].x > x) [[unlikely]] {
         break;
@@ -73,45 +78,9 @@ template <uint32_t POINTS> struct interpolater_t {
     return top / bottom;
   }
 
-  template <uint32_t INPUT_POINTS>
-  interpolater_t(vector_t<point_t, INPUT_POINTS> inputs) {
-    vector_t<point_t, INPUT_POINTS> sorted;
-
-    // first, sort it by x
-    for (int i = 0; i < inputs.size(); i++) {
-      for (int j = i + 1; i < inputs.size(); j++) {
-        auto p_a = inputs[i];
-        auto p_b = inputs[j];
-
-        if (p_a.x > p_b.x) {
-          inputs[i] = p_b;
-          inputs[j] = p_a;
-        }
-      }
-    }
-
-    // now, split into ranges
-    size_t stride = inputs.size() / POINTS;
-
-    for (size_t range_start; range_start < inputs.size();
-         range_start += stride) {
-      size_t count = 0;
-      float sum_x = 0;
-      float sum_y = 0;
-      for (size_t i = range_start;
-           i < inputs.size() && i < range_start + stride; i++) {
-        count++;
-        auto p = inputs[i];
-        sum_x += p.x;
-        sum_y += p.y;
-      }
-
-      float x = sum_x / count;
-      float y = sum_y / count;
-
-      this->points.push_back({x, y});
-    }
-  }
+  // if it matches exactly, don't need to do any resampling/averaging
+  interpolater_t(vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> &inputs)
+      : points(inputs) {}
 
   // A very basic "default constructed" interpolater
   // that pretty much barely works
@@ -140,6 +109,49 @@ template <uint32_t POINTS> struct interpolater_t {
     return d;
   }
 };
+
+template <uint32_t INPUT_POINTS, uint32_t OUTPUT_POINTS>
+interpolater_t<OUTPUT_POINTS>
+interpolater_from_many_points(vector_t<point_t, INPUT_POINTS> &inputs) {
+  vector_t<point_t, INPUT_POINTS> sorted;
+  vector_t<point_t, OUTPUT_POINTS> outputs;
+
+  // first, sort it by x
+  for (uint32_t i = 0; i < inputs.size(); i++) {
+    for (int j = i + 1; i < inputs.size(); j++) {
+      auto p_a = inputs[i];
+      auto p_b = inputs[j];
+
+      if (p_a.x > p_b.x) {
+        inputs[i] = p_b;
+        inputs[j] = p_a;
+      }
+    }
+  }
+
+  // now, split into ranges
+  size_t stride = inputs.size() / OUTPUT_POINTS;
+
+  for (size_t range_start; range_start < inputs.size(); range_start += stride) {
+    size_t count = 0;
+    float sum_x = 0;
+    float sum_y = 0;
+    for (size_t i = range_start; i < inputs.size() && i < range_start + stride;
+         i++) {
+      count++;
+      auto p = inputs[i];
+      sum_x += p.x;
+      sum_y += p.y;
+    }
+
+    float x = sum_x / count;
+    float y = sum_y / count;
+
+    outputs.push_back({x, y});
+  }
+
+  return interpolater_t<OUTPUT_POINTS>(outputs);
+}
 
 /*line_t linear_regression(Array<point_t, 10> &points) {
   Serial.printf("Have %d datapoints to work with\r\n", points.size());
@@ -422,7 +434,7 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
       if (v < midpoint) {
         passed_midpoint = true;
         // move them all over, do processing later
-        for (int i = 0; i < ring.size; i++) {
+        for (uint32_t i = 0; i < ring.size; i++) {
           buf.add_sample(ring.read_nth_oldest(i));
         }
       }
@@ -440,14 +452,14 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
   uint32_t end_pos;
 
   // need to find the points that mark the start and end
-  for (int i = midpoint_pos; i < buf.size - 10; i++) {
+  for (uint32_t i = midpoint_pos; i < buf.size - 10; i++) {
     if (buf.read_nth_oldest(i).value <= initial_resting + 10) {
       start_pos = i;
       break;
     }
   }
 
-  for (int i = midpoint_pos; i > 10; i--) {
+  for (uint32_t i = midpoint_pos; i > 10; i--) {
     auto val = buf.read_nth_oldest(i).value;
     if (val > rough_max - 10) {
       end_pos = i;
@@ -455,10 +467,12 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
     }
   }
 
+  Serial.printf("Found endpoints: %d, %d\r\n", start_pos, end_pos);
+
   vector_t<longsample_t, 4096> fall;
 
   // now, we have our bounds
-  for (int i = start_pos; i >= end_pos; i--) {
+  for (uint32_t i = start_pos; i >= end_pos; i--) {
     // backwards, because buf is a forgetful queue
     fall.push_back(buf.read_nth_oldest(i));
   }
@@ -467,44 +481,63 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
   // in terms of actual "distance" according to
   // laws of gravity
 
+  Serial.println("Doing gravity simulation");
+
   float g = -9.81;
   float initial_velocity = 0;
+  float initial_distance = 0;
   auto t_0 = fall.at(0).time;
 
-  vector_t<position_t, 4096> datapoints;
+  vector_t<point_t, 4096> datapoints;
 
   // TODO: is this right? do I need to know if these are 0 vs uninit?
-  float distance_max = 0;
+  float height_max = 0;
+  float height_min = 0xFFFFFF; // eh
 
   for (auto &sample : fall) {
     uint32_t t_i = sample.time - t_0;
     float t_if = (float)t_i / 1000000; // convert micros to seconds
 
-    float height = 0.5 * g * (t_if * t_if) + (initial_velocity * t_if);
+    float height =
+        0.5 * g * (t_if * t_if) + (initial_velocity * t_if) + initial_distance;
 
-    position_t p;
-    p.distance =
-        -height; // position goes down, but distance goes up as hammer falls
-    p.flux = sample.value;
+    point_t p(sample.value, height);
+
+    datapoints.push_back(p);
 
     // only falling downward, I hope
-    distance_max = min(p.distance, distance_max);
+    height_max = max(p.y, height_max);
+    height_min = min(p.y, height_min);
   }
+
+  Serial.println("Gravity simulation complete, now normalizing range...");
 
   // normalize distance to between 0 and 1,
   // 1 being the highest (closest to sensor), 0 being the "bottom"
   // the datapoints currently should have a max near 0,
   // and a min somewhere in the negatives
+  float range = height_max - height_min;
   for (auto &p : datapoints) {
-    float cur_p = p.distance;
-    p.distance = cur_p / distance_max;
+    float cur_p = p.y;
+
+    p.y = (cur_p - height_min) / (range);
   }
 
   // now we have a bunch of datapoints mapping flux density
-  // to distance, regardless of time
-  //
-  // flux density follows the inverse-cube law
-  //
+  // to distance, and time is nowhere to be found
+  Serial.println("Done normalizing, now creating interpolater from points...");
+
+  // set up an interpolater that can reduce this large sample down to a small
+  // number of control points
+  auto itp = interpolater_from_many_points<4096, MAGNET_INTERPOLATOR_POINTS>(
+      datapoints);
+
+  Serial.println("Got output profile:");
+  for (auto pt : itp.points) {
+    Serial.printf("{ 'x': %f, 'y': %f },\r\n", pt.x, pt.y);
+  }
+
+  return itp;
 }
 
 #endif

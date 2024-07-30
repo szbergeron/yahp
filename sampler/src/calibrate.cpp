@@ -149,10 +149,8 @@ detect_keys(tempboards_t &boards) {
   return info;
 }
 
-/*key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t midi_num,
-                        uint32_t sensor_id) {
-  set_board(board_num);
-  analogReadResolution(10);
+/*key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t
+midi_num, uint32_t sensor_id) { set_board(board_num); analogReadResolution(10);
   analogReadAveraging(2);
   delayMicroseconds(100);
 
@@ -420,29 +418,39 @@ OUT:
 }*/
 
 tempkey_t select_key(tempboards_t &boards) {
-  uint16_t baselines[KEYS_PER_BOARD * boards.boards.size()];
+  uint16_t baselines[NUM_BOARDS][KEYS_PER_BOARD];
+  for(size_t b = 0; b < NUM_BOARDS; b++) {
+      for(size_t k = 0; k < KEYS_PER_BOARD; k++) {
+          baselines[b][k] = 0x9FFF;
+      }
+  }
+
   for (size_t b = 0; b < boards.boards.size(); b++) {
     auto bnum = boards.boards[b];
     set_board(bnum);
 
     for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
       auto pin = pins[knum];
-      baselines[knum + (b * KEYS_PER_BOARD)] = analogRead(pin);
+      baselines[b][knum] = analogRead(pin);
     }
   }
 
   Serial.println("Please press the key you want to select");
 
-  for (size_t b = 0; b < boards.boards.size(); b++) {
-    auto bnum = boards.boards[b];
-    set_board(bnum);
+  while (true) {
+    for (size_t b = 0; b < boards.boards.size(); b++) {
+      auto bnum = boards.boards[b];
+      set_board(bnum);
+      delayMicroseconds(5);
 
-    for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
-      auto pin = pins[knum];
-      auto baseline = baselines[knum + (b * KEYS_PER_BOARD)];
-      auto val = analogRead(pin);
-      if (val > baseline + 50) {
-        return tempkey_t(bnum, pin);
+      for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
+        auto pin = pins[knum];
+        uint16_t baseline = baselines[b][knum];
+        uint16_t val = analogRead(pin);
+        if (val > baseline + 50) {
+            Serial.printf("baseline was %d, val found was %d, on bnum %d pin %d\r\n", (int)baseline, (int)val, (int)bnum, (int)pin);
+          return tempkey_t(bnum, pin);
+        }
       }
     }
   }
@@ -451,16 +459,25 @@ tempkey_t select_key(tempboards_t &boards) {
 keyboardspec_t key_calibration() {
   auto boards = detect_boards();
 
-  auto keys = detect_keys(boards);
+  //auto key_presence = detect_keys(boards);
+
+  samplerspec_t samplerspec;
+  vector_t<key_spec_t, KEY_COUNT_MAX> keys;
+  vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals;
 
   auto start_midi =
       prompt_int("What is the lowest midi note on your piano? (Usually the "
                  "minimum on an 88 key keyboard is 21)",
                  0, 127, 45);
 
+  auto midi_channel = prompt_int("What midi channel should notes play on by default?", 0, 16, 1);
+
   auto num_keys = prompt_int("How many keys does your piano have?", 0,
                              127 - start_midi, min(88, 127 - start_midi));
 
+
+
+  uint32_t csid = 0;
   for (uint8_t midi_num = start_midi; midi_num < midi_num + num_keys;
        midi_num++) {
     auto n = format_note(midi_num);
@@ -474,16 +491,27 @@ keyboardspec_t key_calibration() {
     Serial.printf("Please press %s on your piano\r\n", n.c_str());
     auto sensor = select_key(boards);
 
+    //
+
     Serial.printf("Key %s is assigned pin %d on board %d\r\n", n.c_str(),
                   (int)sensor.pin, (int)sensor.board);
 
+    auto interpolater = drop_test(sensor.board, sensor.pin);
 
-    auto curve_points = drop_test(sensor.board, sensor.pin);
+    uint32_t sid = csid++;
 
-    //
+    sensorspec_t sensorspec(sid, sensor.pin, interpolater.points);
+
+    samplerspec.get_board(sensor.board).sensors.push_back(sensorspec);
+    key_spec_t k(sid, midi_num, midi_channel);
+    keys.push_back(k);
   }
 
-  //
+  while(confirm("Do you have an additional pedal to add?", false)) {
+      eloop("aaaaaaa");
+  }
+
+  return keyboardspec_t(samplerspec, keys, pedals);
 }
 
 result_t<JsonDocument, unit_t> json_from_sd(const char *name) {

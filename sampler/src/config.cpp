@@ -9,6 +9,8 @@
 #include <SD.h>
 #include <cstddef>
 
+using namespace ArduinoJson;
+
 #ifndef YAHP_CONFIG
 #define YAHP_CONFIG
 
@@ -47,7 +49,7 @@ struct key_spec_t {
 #endif
 
   uint8_t midi_note = 0;
-  uint8_t midi_channel = 0;
+  uint8_t midi_channel = 1;
 
   key_spec_t() {}
 
@@ -166,9 +168,9 @@ struct pedal_spec_t {
 
 struct sensorspec_t {
   uint8_t pin_num = 0;
-  vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve;
 
   uint32_t sensor_id = 0;
+  vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve;
 
   sensorspec_t() {}
 
@@ -177,7 +179,7 @@ struct sensorspec_t {
       : pin_num(pin_num), sensor_id(sensor_id), curve(curve) {}
 
   sensorspec_t(JsonObject j)
-      : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]), curve(j["curve"]) {}
+      : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]), curve(j["curve"].as<JsonArray>()) {}
 
   sensorspec_t(JsonVariant jv) : sensorspec_t(jv.as<JsonObject>()) {}
 
@@ -247,6 +249,17 @@ struct samplerspec_t {
     return result_t<sensorspec_t *, unit_t>::err({});
   }
 
+  boardspec_t& get_board(uint8_t bnum) {
+      for(auto& board: this->boards) {
+          if(board.board_num == bnum) {
+              return board;
+          }
+      }
+
+      this->boards.push_back(boardspec_t());
+      return this->boards.back();
+  }
+
   samplerspec_t(JsonObject j) {
     auto ja = j["boards"].as<JsonArray>();
 
@@ -273,9 +286,9 @@ struct samplerspec_t {
 };
 
 struct keyboardspec_t {
+  samplerspec_t sampler;
   vector_t<key_spec_t, KEY_COUNT_MAX> keys;
   vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals;
-  samplerspec_t sampler;
 
   keyboardspec_t() {}
 
@@ -284,9 +297,7 @@ struct keyboardspec_t {
                  vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals)
       : sampler(sampler), keys(keys), pedals(pedals) {}
 
-  keyboardspec_t(JsonObject d)
-      : sampler(d["sampler"].as<JsonObject>()),
-        gbl(d["global"].as<JsonObject>()) {
+  keyboardspec_t(JsonObject d) : sampler(d["sampler"].as<JsonObject>()) {
     JsonArray kja = d["keys"].as<JsonArray>();
     JsonArray pja = d["pedals"].as<JsonArray>();
 
@@ -322,7 +333,7 @@ struct keyboardspec_t {
 
     d["keys"] = kja;
     d["pedals"] = pja;
-    // d["sampler"] = this->sampler.to_json();
+    d["sampler"] = this->sampler.to_json();
     // d["global"] = this->gbl.to_json();
 
     return d;
@@ -337,9 +348,8 @@ struct fullspec_t {
       : keyboard(keyboard), global(global) {}
 };
 
-//static uint8_t KBSPEC_BUF[sizeof(keyboardspec_t)];
-//static keyboardspec_t *KBSPEC = nullptr;
-
+// static uint8_t KBSPEC_BUF[sizeof(keyboardspec_t)];
+// static keyboardspec_t *KBSPEC = nullptr;
 
 /*
 // I KNOW this is horrible and has memory safety issues.

@@ -143,7 +143,7 @@ void setup() {
 
   Serial.println("Made sampler");
 
-  KEYBOARD = new (KEYBOARD_BUF) keyboard_t(spec, SAMPLER, spec.global);
+  KEYBOARD = new (KEYBOARD_BUF) keyboard_t(spec, SAMPLER);
 
   IDLER = new (IDLER_BUF) idler_t(KEYBOARD);
 

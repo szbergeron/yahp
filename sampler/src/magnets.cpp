@@ -54,10 +54,12 @@ template <uint32_t POINTS> struct interpolater_t {
     uint32_t i_b = 0;
 
     // branchless because it's fun
+    /*
     idx -= 1 * (idx == POINTS);
     idx += 1 * (idx == 0);
+    */
 
-    /*if (idx == POINTS) [[unlikely]] {
+    if (idx == POINTS) [[unlikely]] {
       i_a = idx - 2;
       i_b = idx - 1;
     } else if (idx == 0) [[unlikely]] {
@@ -67,7 +69,7 @@ template <uint32_t POINTS> struct interpolater_t {
       // linear between the points
       i_a = idx - 1;
       i_b = idx;
-    }*/
+    }
 
     auto p_a = this->points[i_a];
     auto p_b = this->points[i_b];
@@ -75,7 +77,16 @@ template <uint32_t POINTS> struct interpolater_t {
     auto top = (p_a.y * (p_b.x - x)) + (p_b.y * (x - p_a.x));
     auto bottom = p_b.x - p_a.x;
 
-    return top / bottom;
+    float nv = top / bottom;
+
+    if (nv > 2) [[unlikely]] {
+      Serial.printf("inner weird? nv %f, top %f, btm %f, pbx %f, pax %f,"
+                    "pby %f, pay %f, x %f, i_a %d, i_b %d, pts %d\r\n",
+                    nv, top, bottom, p_b.x, p_a.x, p_b.y, p_a.y, x, i_a, i_b,
+                    this->points.size());
+    }
+
+    return nv;
   }
 
   // if it matches exactly, don't need to do any resampling/averaging
@@ -119,7 +130,7 @@ interpolater_from_many_points(vector_t<point_t, INPUT_POINTS> &inputs) {
 
   // first, sort it by x
   for (uint32_t i = 0; i < inputs.size(); i++) {
-    for (int j = i + 1; j < inputs.size(); j++) {
+    for (int32_t j = i + 1; j < (int32_t)inputs.size(); j++) {
       auto p_a = inputs[i];
       auto p_b = inputs[j];
 
@@ -136,7 +147,8 @@ interpolater_from_many_points(vector_t<point_t, INPUT_POINTS> &inputs) {
 
   Serial.printf("Found stride of %d\n\r", stride);
 
-  for (size_t range_start = 0; range_start < inputs.size(); range_start += stride) {
+  for (size_t range_start = 0; range_start < inputs.size();
+       range_start += stride) {
     size_t count = 0;
     float sum_x = 0;
     float sum_y = 0;
@@ -473,7 +485,7 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
 
   Serial.println("Got first bound, finding second...");
 
-  for (int32_t i = midpoint_pos; i < buf.size(); i++) {
+  for (int32_t i = midpoint_pos; i < (int32_t)buf.size(); i++) {
     if (buf[i].value <= initial_resting + 10) {
       end_pos = i;
       break;
@@ -529,10 +541,10 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
     val_min = max(p.x, val_min);
   }
 
-  Serial.printf("Height span is %f to %f mm\r\n", height_min * 1000, height_max * 1000);
-  
-  //Serial.printf("Created x-y dp vec with size %d\r\n", datapoints.size());
+  Serial.printf("Height span is %f to %f mm\r\n", height_min * 1000,
+                height_max * 1000);
 
+  // Serial.printf("Created x-y dp vec with size %d\r\n", datapoints.size());
 
   // normalize distance to between 0 and 1,
   // 1 being the highest (closest to sensor), 0 being the "bottom"
@@ -541,7 +553,8 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
   float range = height_max - height_min;
 
   Serial.printf("Range is %f mm\r\n", range * 1000);
-  Serial.println("Gravity simulation complete, now normalizing points to within range...");
+  Serial.println(
+      "Gravity simulation complete, now normalizing points to within range...");
   for (auto &p : datapoints) {
     float cur_p = p.y;
 

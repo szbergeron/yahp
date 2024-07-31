@@ -1,6 +1,7 @@
 #include "avr/pgmspace.h"
 #include "config.cpp"
 #include "key.cpp"
+#include "keyboard.cpp"
 #include "magnets.cpp"
 #include "pins_arduino.h"
 #include "usb_serial.h"
@@ -24,19 +25,6 @@ void blinkblink() {
     delay(250);
   }
 }
-
-struct tempboards_t {
-  vector_t<uint8_t, NUM_BOARDS> boards;
-
-  tempboards_t(vector_t<uint8_t, NUM_BOARDS> boards) : boards(boards) {}
-};
-
-struct tempkey_t {
-  uint8_t board;
-  uint8_t pin;
-
-  tempkey_t(uint8_t board, uint8_t pin) : board(board), pin(pin) {}
-};
 
 tempboards_t detect_boards() {
   Serial.println("Getting board info");
@@ -462,22 +450,21 @@ tempkey_t select_key(tempboards_t &boards) {
 keyboardspec_t key_calibration() {
   auto boards = detect_boards();
 
-  // auto key_presence = detect_keys(boards);
-
   samplerspec_t samplerspec;
   vector_t<key_spec_t, KEY_COUNT_MAX> keys;
   vector_t<pedal_spec_t, PEDAL_COUNT_MAX> pedals;
 
-  auto start_midi =
+  uint32_t start_midi =
       prompt_int("What is the lowest midi note on your piano? (Usually the "
                  "minimum on an 88 key keyboard is 21)",
-                 0, 127, 45);
+                 0, 127, FIRST_MIDI_NOTE + 30);
 
-  auto midi_channel = prompt_int(
+  uint32_t midi_channel = prompt_int(
       "What midi channel should notes play on by default?", 0, 16, 1);
 
-  auto num_keys = prompt_int("How many keys does your piano have?", 0,
-                             127 - start_midi, min(88, 127 - start_midi));
+  uint32_t num_keys =
+      prompt_int("How many keys does your piano have?", 0, 127 - start_midi,
+                 min(88, 127 - (int32_t)start_midi));
 
   uint32_t csid = 0;
   for (uint32_t midi_num = start_midi; midi_num < start_midi + num_keys;
@@ -490,7 +477,8 @@ keyboardspec_t key_calibration() {
       continue;
     }
 
-    Serial.printf("Please press %s on your piano\r\n", n.c_str());
+    Serial.printf("Please press %s on your piano (will be sid %d)\r\n",
+                  n.c_str(), csid);
     auto sensor = select_key(boards);
 
     //
@@ -516,15 +504,92 @@ keyboardspec_t key_calibration() {
   return keyboardspec_t(samplerspec, keys, pedals);
 }
 
+float read_key(uint32_t sid, keyboard_t *kbd) {
+  return kbd->sampler->find_sensor(sid)->buf.latest().height;
+}
+
+// Doesn't free itself, reboot after done!
+keyboard_t *make_kbd(fullspec_t spec) {
+  ADC adc;
+  auto sampler = new sampler_t(adc, spec.keyboard.sampler);
+  auto kbd = new keyboard_t(spec, sampler);
+
+  return kbd;
+}
+
+JsonDocument configure_offsets(fullspec_t &spec) {
+  confirm("Hands off the keyboard! Hit enter once understood", true);
+  delay(500);
+
+  const uint32_t AVERAGES_COUNT = 500;
+
+  auto kbd = make_kbd(spec);
+
+  for (uint32_t averages = 0; averages < AVERAGES_COUNT; averages++) {
+    /*for (auto &key : spec.keyboard.keys) {
+        //
+    }*/
+    //
+    kbd->sampler->sample_round();
+    for (kbd_key_t &key : kbd->keys) {
+      float cur_val = read_key(key.sensor->sensor_id, kbd);
+
+      if (averages == 0) {
+        key.calibration.spec.bound_min = cur_val;
+        key.calibration.spec.bound_max = cur_val;
+      } else {
+        key.calibration.spec.bound_min =
+            (key.calibration.spec.bound_min * averages + cur_val) /
+            (averages + 1);
+      }
+    }
+  }
+
+  Serial.println("Now, play each note at PPP level (or lift the hammer just "
+                 "barely to touch the striker rail!)");
+  Serial.println("Press enter when done");
+
+  while (!newline_waiting()) {
+    kbd->sampler->sample_round();
+    for (kbd_key_t &key : kbd->keys) {
+      float cur_val = read_key(key.sensor->sensor_id, kbd);
+
+      key.calibration.spec.bound_max =
+          max(key.calibration.spec.bound_max, cur_val);
+    }
+  }
+
+  if (confirm("Do you want to use the new range config generated here?",
+              true)) {
+    JsonDocument jd;
+    for (kbd_key_t &key : kbd->keys) {
+      JsonDocument jdi;
+
+      jdi["min"] = key.calibration.spec.bound_min;
+      jdi["max"] = key.calibration.spec.bound_max;
+
+      jd[key.sensor->sensor_id] = jdi;
+      //
+    }
+
+    return jd;
+  } else {
+    // just reboot
+    doReboot();
+    JsonDocument never;
+    return never;
+  }
+}
+
 const size_t JSON_FILE_MAX_LENGTH = 32000;
 char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
-result_t<JsonDocument*, unit_t> json_from_sd(const char *name) {
-    Serial.println("Grabbing json from sd");
+result_t<JsonDocument *, unit_t> json_from_sd(const char *name) {
+  Serial.println("Grabbing json from sd");
 
   if (!SD.exists(name)) {
     Serial.println("No config on SD");
-    return result_t<JsonDocument*, unit_t>::err({});
+    return result_t<JsonDocument *, unit_t>::err({});
   }
 
   auto f = SD.open(name, FILE_READ);
@@ -544,7 +609,7 @@ result_t<JsonDocument*, unit_t> json_from_sd(const char *name) {
 
   Serial.println("deserialized");
 
-  return result_t<JsonDocument*, unit_t>::ok(doc);
+  return result_t<JsonDocument *, unit_t>::ok(doc);
 }
 
 void json_to_sd(const char *name, JsonDocument doc) {
@@ -561,10 +626,11 @@ static fullspec_t get_spec() {
   {
     auto r = json_from_sd("calibration.json");
     if (r.is_ok()) {
+      auto d = r.unwrap();
       Serial.println("Loaded calibration json file");
       // we already have sampler then
-      s = keyboardspec_t((*r.unwrap()).as<JsonObject>());
-      //
+      s = keyboardspec_t((*d).as<JsonObject>());
+      delete d;
     } else {
       s = key_calibration();
       json_to_sd("calibration.json", s.to_json());
@@ -581,8 +647,10 @@ static fullspec_t get_spec() {
   {
     auto r2 = json_from_sd("global.json");
     if (r2.is_ok()) {
+      auto d = r2.unwrap();
       // return samplerspec_t(r.unwrap().as<JsonObject>());
-      gbl = global_key_config_t((*r2.unwrap()).as<JsonObject>());
+      gbl = global_key_config_t((*d).as<JsonObject>());
+      delete d;
     } else {
       gbl = gbl_config(s);
       json_to_sd("global.json", gbl.to_json());
@@ -593,7 +661,29 @@ static fullspec_t get_spec() {
     }
   }
 
-  return fullspec_t(s, gbl);
+  auto spec = fullspec_t(s, gbl);
+
+  {
+    auto r = json_from_sd("offsets.json");
+    if (r.is_ok()) {
+      JsonDocument *d = r.unwrap();
+      JsonObject o = (*d).as<JsonObject>();
+      for (key_spec_t &key : spec.keyboard.keys) {
+        if (o.containsKey(String(key.sensor_id))) {
+          JsonObject ko = o[String(key.sensor_id)];
+          key.bound_min = ko["min"];
+          key.bound_max = ko["max"];
+        }
+      }
+      delete d;
+    } else {
+      auto jd = configure_offsets(spec);
+      json_to_sd("offsets.json", jd);
+      doReboot();
+    }
+  }
+
+  return spec;
 }
 
 #endif

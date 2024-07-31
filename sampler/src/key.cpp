@@ -12,11 +12,10 @@
 #define ENABLE_MIDI
 
 static const size_t STRIKE_BUF_SIZE = 48;
-static const uint32_t SETTLE_DELAY_MS = 60;
+static const uint32_t SETTLE_DELAY_MS = 100;
 
 struct key_calibration_t {
   key_spec_t spec;
-  interpolater_t<MAGNET_INTERPOLATOR_POINTS> interpolater;
 
   // all of these are normalized to
   // ideally fall within a 0-1 range,
@@ -32,10 +31,23 @@ struct key_calibration_t {
     return normalized;
   }*/
 
-  inline float map(uint16_t raw_val) {
-      float linear_distance = this->interpolater.interpolate(raw_val);
+  inline float map(float height) {
+    // the sensor has some calibration, but we also have some
+    // variation vertically that is easier to calibrate, so
+    // we adjust the "pseudo-normalized" output from the interpolater
+    // to match the actual range of the hammer
+    float range = this->spec.bound_max - this->spec.bound_min;
 
-      return linear_distance;
+    float val = (height - this->spec.bound_min) / range;
+
+    if (val > 2) [[unlikely]] {
+      Serial.printf("weird? %f, %f, %f, %f\r\n", val, height,
+                    this->spec.bound_min, this->spec.bound_max);
+    }
+    // in ideal circumstances, this should return a value that falls
+    // within [0, 1] and is, much more importantly, _consistent_ from key to key
+
+    return val;
   }
 
   //
@@ -72,7 +84,7 @@ struct key_calibration_t {
     }
   }*/
 
-  key_calibration_t(key_spec_t &spec, sensorspec_t &sspec) : spec(spec), interpolater(sspec.curve) {}
+  key_calibration_t(key_spec_t &spec, sensorspec_t &sspec) : spec(spec) {}
 };
 
 struct kbd_key_t {
@@ -129,63 +141,6 @@ struct kbd_key_t {
   global_key_config_t global_key_config;
   uint32_t strike_millis = 0;
 
-  inline new_state_t new_state_given(sample_t sample) {
-    auto &c = this->calibration;
-    auto &g = this->global_key_config;
-
-    auto normalized = c.map(sample.value);
-    if (false) {
-      Serial.println("Normalized: " + String(normalized) + " for note " +
-                     this->fmt_note());
-    }
-
-    if (false) {
-      Serial.println("Got a val for " + this->fmt_note() + " of " +
-                     String(sample.value));
-    }
-
-    if (normalized <= g.active) {
-      return new_state_t(key_state_e::KEY_RESTING, damper_state_e::DAMPER_DOWN);
-    }
-
-    damper_state_e ds;
-    key_state_e ks;
-
-    uint32_t since_strike = millis() - this->strike_millis;
-
-    if (normalized > g.damper_up) {
-      ds = damper_state_e::DAMPER_UP;
-    } else if (normalized < g.damper_down && since_strike > 300) {
-      ds = damper_state_e::DAMPER_DOWN;
-      if (this->dstate == damper_state_e::DAMPER_UP) {
-        Serial.printf("Transitions with an absolute of %d and min %d\r\n",
-                      sample.value);
-        Serial.printf("Transitions with a normal of %f\r\n",
-                      normalized); // + String(normalized));
-      }
-    } else {
-      ds = this->dstate;
-    }
-
-    if (this->kstate == key_state_e::KEY_STRIKING && since_strike < 300) {
-      // still in strike recovery
-      ks = key_state_e::KEY_STRIKING;
-    } else if (normalized > g.active && normalized <= g.repetition) {
-      ks = key_state_e::KEY_READY;
-    } else if (normalized > g.repetition && normalized <= g.letoff) {
-      // keep it as it is, either coming up (READY),
-      // or recovering from a strike (STRIKING)
-      ks = this->kstate;
-    } else if (normalized > g.letoff && normalized <= g.strike) {
-      ks = key_state_e::KEY_CRITICAL;
-    } else if (normalized > g.strike) {
-      ks = key_state_e::KEY_STRIKING;
-      this->strike_millis = millis();
-    }
-
-    return new_state_t(ks, ds);
-  }
-
   // this is absolutely inlined
   // because it needs to be in the hot idle loop
   // and get out of the way _fast_
@@ -202,11 +157,12 @@ struct kbd_key_t {
 
     this->sensor->buf.unackd = 0;
     sample_t latest = this->sensor->buf.latest();
-    float value = this->calibration.map(latest.value);
+    float hammer_position = this->calibration.map(latest.height);
+    sample_t corrected(hammer_position, latest.time);
 
     switch (this->kstate) {
     case key_state_e::KEY_RESTING:
-      if (value > this->global_key_config.active) {
+      if (hammer_position > this->global_key_config.active) {
         this->kstate = key_state_e::KEY_READY;
         this->sensor->priority = sensor_t::poll_priority_e::CRITICAL;
       } else {
@@ -214,33 +170,37 @@ struct kbd_key_t {
       }
       break;
     case key_state_e::KEY_READY:
-      if (value > this->global_key_config.letoff) {
+      if (hammer_position > this->global_key_config.letoff) {
         // go to critical
-        this->strike_buf.add_sample(latest); // don't lose that one!
-        this->strike_buf.clear();            // ready it here
+        Serial.printf("Goes to critical with value %f\r\n", hammer_position);
+        this->strike_buf.add_sample(corrected); // don't lose that one!
+        this->strike_buf.clear();               // ready it here
         this->kstate = key_state_e::KEY_CRITICAL;
-      } else if (value < this->global_key_config.active) {
+      } else if (hammer_position < this->global_key_config.active) {
         // drop to resting
         this->sensor->priority = sensor_t::poll_priority_e::RELAXED;
         this->kstate = key_state_e::KEY_RESTING;
       }
       break;
     case key_state_e::KEY_CRITICAL:
-      this->strike_buf.add_sample(latest);
+      this->strike_buf.add_sample(corrected);
 
-      if (value > this->global_key_config.strike) {
+      if (hammer_position > this->global_key_config.strike) {
+        Serial.printf(
+            "Processes strike after position reaches %f, strike is %f\r\n",
+            hammer_position, this->global_key_config.strike);
         // go to strike
         this->kstate = key_state_e::KEY_STRIKING;
         this->strike_millis = millis();
         this->process_strike();
-      } else if (value < this->global_key_config.repetition) {
+      } else if (hammer_position < this->global_key_config.repetition) {
         this->kstate = key_state_e::KEY_READY;
       }
 
       break;
     case key_state_e::KEY_STRIKING:
       bool settled = (millis() - this->strike_millis) > SETTLE_DELAY_MS;
-      if (value < this->global_key_config.repetition && settled) {
+      if (hammer_position < this->global_key_config.repetition && settled) {
         // only one way out \:)
         this->kstate = key_state_e::KEY_READY;
       }
@@ -248,73 +208,22 @@ struct kbd_key_t {
       break;
     }
 
+    bool settled = (millis() - this->strike_millis) > SETTLE_DELAY_MS;
     switch (this->dstate) {
     case damper_state_e::DAMPER_UP:
-      if(value < this->global_key_config.damper_down) {
-          this->dstate = damper_state_e::DAMPER_DOWN;
-          this->lower_damper();
+      if (hammer_position < this->global_key_config.damper_down && settled) {
+        this->dstate = damper_state_e::DAMPER_DOWN;
+        this->lower_damper();
       }
       break;
     case damper_state_e::DAMPER_DOWN:
-      if(value > this->global_key_config.damper_up) {
-          this->dstate = damper_state_e::DAMPER_UP;
-          this->lift_damper();
+      if (hammer_position > this->global_key_config.damper_up) {
+        this->dstate = damper_state_e::DAMPER_UP;
+        this->lift_damper();
       }
       break;
     }
   }
-
-  /*inline void process_samples() {
-    // print_value(this->sensor->buf.latest().value, true);
-
-    if (!this->process_needed()) [[likely]] {
-      return; // no new info
-    }
-    // Serial.println("samples need processing");
-
-    auto latest = this->sensor->buf.latest();
-
-    auto ns = this->new_state_given(latest);
-
-    if (ns.key_state == key_state_e::KEY_RESTING) {
-      this->sensor->priority = sensor_t::poll_priority_e::RELAXED;
-      // Serial.println(this->fmt_note() + " goes to rest");
-    } else if (ns.key_state == key_state_e::KEY_READY &&
-               this->kstate == key_state_e::KEY_RESTING) {
-      // Serial.println(this->fmt_note() + " goes to critical polling");
-      this->sensor->priority = sensor_t::poll_priority_e::CRITICAL;
-    } else if (ns.key_state == key_state_e::KEY_CRITICAL) {
-      // Serial.println("In critical state");
-      //  start collecting samples
-      for (int32_t i = (int32_t)this->sensor->buf.unackd - 1; i >= 0; i--) {
-        Serial.println("Adds sample");
-        this->strike_buf.add_sample(this->sensor->buf.read_nth_oldest(i));
-        this->sensor->buf.unackd = 0;
-      }
-    } else if (ns.key_state == key_state_e::KEY_STRIKING &&
-               this->kstate == key_state_e::KEY_CRITICAL) {
-      // note played, grab samples and process velocity
-      Serial.printf("%s processes strike\r\n", this->fmt_note().c_str());
-      this->process_strike();
-      this->strike_buf.clear();
-    } else if (ns.key_state == key_state_e::KEY_READY &&
-               this->kstate == key_state_e::KEY_CRITICAL) {
-      // clear sample buf, go back to "waiting"
-      this->strike_buf.clear();
-    }
-
-    this->kstate = ns.key_state;
-
-    if (ns.damper_state == damper_state_e::DAMPER_UP &&
-        this->dstate == damper_state_e::DAMPER_DOWN) {
-      this->lift_damper();
-    } else if (ns.damper_state == damper_state_e::DAMPER_DOWN &&
-               this->dstate == damper_state_e::DAMPER_UP) {
-      this->lower_damper();
-    }
-
-    this->dstate = ns.damper_state;
-  }*/
 
   void lift_damper() {
     this->dstate = damper_state_e::DAMPER_UP;
@@ -322,7 +231,7 @@ struct kbd_key_t {
 #if defined(ENABLE_MIDI)
     // does this work?
     // usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
-    auto note = this->calibration.spec.midi_note + 30;
+    auto note = this->calibration.spec.midi_note;
     auto channel = this->calibration.spec.midi_channel;
     usbMIDI.sendAfterTouchPoly(note, 127, channel);
 #endif
@@ -331,13 +240,12 @@ struct kbd_key_t {
   void lower_damper() {
 
     this->dstate = damper_state_e::DAMPER_DOWN;
-    return; // for now
     Serial.printf("Damp note %s\r\n", this->fmt_note().c_str());
     Serial.printf("The current level is %d\r\n" +
-                  (int32_t)this->sensor->buf.latest().value);
+                  (int32_t)this->sensor->buf.latest().height);
 
 #if defined(ENABLE_MIDI)
-    auto note = this->calibration.spec.midi_note + 30;
+    auto note = this->calibration.spec.midi_note;
     auto channel = this->calibration.spec.midi_channel;
     usbMIDI.sendNoteOff(note, 127, channel);
     // usbMIDI.send_now();
@@ -363,12 +271,9 @@ struct kbd_key_t {
     float n = points.size();
     Serial.println("Profile:");
     for (auto point : points) {
-      float x = (point.time - min_x);
-      // float y = (point.value - min_val);
-      float y = this->calibration.map(point.value);
-      // print_normalized(y);
+      float x = point.time - min_x;
+      float y = point.height;
       Serial.printf("%f @ %f\r\n", y, x);
-      // Serial.flush();
       sum_x += x;
       sum_y += y;
       sum_xmy += x * y;
@@ -410,12 +315,13 @@ struct kbd_key_t {
     }
 
 #if defined(ENABLE_MIDI)
-    auto note = this->calibration.spec.midi_note + 30;
+    auto note = this->calibration.spec.midi_note;
     auto channel = this->calibration.spec.midi_channel;
     Serial.println("Slope was " + String(slope));
     Serial.println("normalized was " + String(normalized_velocity));
     Serial.println("Sends velocity: " + String(midi_velocity));
     Serial.println("Sent note on! Channel: " + String(channel));
+    Serial.printf("Note on for %d\r\n", note);
     usbMIDI.sendNoteOn(note, midi_velocity, channel);
 #endif
   }
@@ -435,6 +341,7 @@ struct kbd_key_t {
     return pow(n, 0.5);
     // return std::sqrt(v);
 
+    /*
     // float p1x = c.bezier_p1x;
     float p1y = c.bezier_p1y;
     // float p2x = c.bezier_p2x;
@@ -461,7 +368,7 @@ struct kbd_key_t {
       oy = 0;
     }
 
-    return oy;
+    return oy;*/
   }
 };
 

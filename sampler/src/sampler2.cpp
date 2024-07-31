@@ -27,12 +27,12 @@ __attribute__((always_inline)) static inline void step_idle(uint32_t window_ns,
 
 struct sample_t {
 
-  uint16_t value;
+  float height;
   uint32_t time;
 
-  sample_t(uint16_t value, uint32_t time) : value(value), time(time) {}
+  sample_t(float height, uint32_t time) : height(height), time(time) {}
 
-  sample_t() : value(0), time(0) {}
+  sample_t() : height(0), time(0) {}
 };
 
 template <uint32_t BUFSIZE = SAMPLE_BUFFER_LENGTH> struct sample_buf_t {
@@ -131,6 +131,7 @@ struct sensor_t {
 
   sample_buf_t<SAMPLE_BUFFER_LENGTH> buf;
   poll_priority_e priority = poll_priority_e::RELAXED;
+  interpolater_t<MAGNET_INTERPOLATOR_POINTS> curve;
 
   uint8_t pin = 0;
 
@@ -170,15 +171,20 @@ struct sensor_t {
     return sample_request_t(this->pin, this);
   }
 
-  void add_sample(sample_t s) { this->buf.add_sample(s); }
+  void add_raw_sample(uint32_t time, uint16_t raw_value) {
+    auto nv = this->curve.interpolate(raw_value);
+    this->buf.add_sample(sample_t(nv, time));
+  }
 
-  sensor_t(uint8_t pin, uint32_t sensor_id) : sensor_id(sensor_id), pin(pin) {
+  sensor_t(uint8_t pin, uint32_t sensor_id,
+           vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve)
+      : sensor_id(sensor_id), curve(curve), pin(pin) {
     //
   }
 
-  sensor_t() {
+  /*sensor_t(): curve(0, 1000) {
     // errorln("sensor_t was default constructed");
-  }
+  }*/
 };
 
 struct adc_info_t {
@@ -360,7 +366,7 @@ struct board_t {
         a.sensor->add_sample(s);
       }
 #else
-      //Serial.println("Adding round");
+      // Serial.println("Adding round");
       if (a.is_real() && b.is_real()) {
         ts_a = micros();
         ts_b = micros();
@@ -378,21 +384,22 @@ struct board_t {
         sample_t sa(v_a, ts_a);
         sample_t sb(v_b, ts_b);
 
-        a.sensor->add_sample(sa);
-        b.sensor->add_sample(sb);
+        a.sensor->add_raw_sample(ts_a, v_a);
+        b.sensor->add_raw_sample(ts_b, v_b);
 
       } else if (a.is_real()) {
+
         ts_a = micros();
         auto v_a = adc_a->analogRead(a.pin);
-        sample_t sa(v_a, ts_a);
 
-        a.sensor->add_sample(sa);
+        a.sensor->add_raw_sample(ts_a, v_a);
+
       } else if (b.is_real()) {
+
         ts_b = micros();
         auto v_b = adc_b->analogRead(b.pin);
-        sample_t sb(v_b, ts_b);
 
-        b.sensor->add_sample(sb);
+        b.sensor->add_raw_sample(ts_b, v_b);
       }
 
 #endif
@@ -402,7 +409,7 @@ struct board_t {
   board_t(boardspec_t &bspec, adcs_info_t &adcs_info)
       : board_num(bspec.board_num), adcs(adcs_info) {
     for (auto &keyc : bspec.sensors) {
-      sensor_t sensor(keyc.pin_num, keyc.sensor_id);
+      sensor_t sensor(keyc.pin_num, keyc.sensor_id, keyc.curve);
       this->keys.push_back(sensor);
     }
   }

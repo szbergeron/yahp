@@ -160,6 +160,8 @@ static void gap(uint32_t a, uint32_t b, String m) {
 }*/
 
 const uint8_t FIRST_MIDI_NOTE = 21;
+//const uint8_t KEYS_IN_OCTAVE = 12;
+//const uint8_t FIRST_OCTAVE = 3;
 
 String format_note(uint8_t index) {
   String base;

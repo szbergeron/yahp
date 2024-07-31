@@ -37,6 +37,9 @@ const int PIN_COUNT = 42;
 struct key_spec_t {
   uint32_t sensor_id = 0;
 
+  float bound_min = 0.0;
+  float bound_max = 1.0;
+
   // the value observed by the sensor when...
 
 #ifdef USE_CONTRIB_WINDOW
@@ -48,17 +51,20 @@ struct key_spec_t {
   vector_t<float, CONTRIB_WINDOW> factor_right;
 #endif
 
-  uint8_t midi_note = 0;
   uint8_t midi_channel = 1;
+  uint8_t midi_note = 0;
 
   key_spec_t() {}
 
   key_spec_t(uint32_t sid, uint8_t midi_note, uint8_t midi_channel)
-      : sensor_id(sid), midi_note(midi_note), midi_channel(midi_channel) {}
+      : sensor_id(sid), midi_channel(midi_channel), midi_note(midi_note) {}
 
   key_spec_t(JsonObject j)
-      : sensor_id(j["sensor_id"]), midi_note(j["midi_note"]),
-        midi_channel(j["midi_channel"]) {}
+      : sensor_id(j["sensor_id"]),
+        bound_min(j.containsKey("bound_min") ? j["bound_min"] : 0.0),
+        bound_max(j.containsKey("bound_max") ? j["bound_max"] : 1.0),
+        midi_channel(j.containsKey("midi_channel") ? j["midi_channel"] : 1),
+        midi_note(j["midi_note"]) {}
 
   JsonDocument to_json() {
     JsonDocument d;
@@ -66,9 +72,24 @@ struct key_spec_t {
     d["sensor_id"] = this->sensor_id;
     d["midi_note"] = this->midi_note;
     d["midi_channel"] = this->midi_channel;
+    d["bound_min"] = this->bound_min;
+    d["bound_max"] = this->bound_max;
 
     return d;
   }
+};
+
+struct tempboards_t {
+  vector_t<uint8_t, NUM_BOARDS> boards;
+
+  tempboards_t(vector_t<uint8_t, NUM_BOARDS> boards) : boards(boards) {}
+};
+
+struct tempkey_t {
+  uint8_t board;
+  uint8_t pin;
+
+  tempkey_t(uint8_t board, uint8_t pin) : board(board), pin(pin) {}
 };
 
 struct global_key_config_t {
@@ -179,7 +200,8 @@ struct sensorspec_t {
       : pin_num(pin_num), sensor_id(sensor_id), curve(curve) {}
 
   sensorspec_t(JsonObject j)
-      : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]), curve(j["curve"].as<JsonArray>()) {}
+      : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]),
+        curve(j["curve"].as<JsonArray>()) {}
 
   sensorspec_t(JsonVariant jv) : sensorspec_t(jv.as<JsonObject>()) {}
 
@@ -249,15 +271,25 @@ struct samplerspec_t {
     return result_t<sensorspec_t *, unit_t>::err({});
   }
 
-  boardspec_t& get_board(uint8_t bnum) {
-      for(auto& board: this->boards) {
-          if(board.board_num == bnum) {
-              return board;
+  tempkey_t find_tempkey(uint32_t sid) {
+      for(auto &board: this->boards) {
+          for(auto &sensor : board.sensors) {
+              if(sensor.sensor_id == sid) {
+                  return tempkey_t(board.board_num, sensor.pin_num);
+              }
           }
       }
+  }
 
-      this->boards.push_back(boardspec_t());
-      return this->boards.back();
+  boardspec_t &get_board(uint8_t bnum) {
+    for (auto &board : this->boards) {
+      if (board.board_num == bnum) {
+        return board;
+      }
+    }
+
+    this->boards.push_back(boardspec_t());
+    return this->boards.back();
   }
 
   samplerspec_t(JsonObject j) {

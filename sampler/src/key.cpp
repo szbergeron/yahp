@@ -329,7 +329,9 @@ struct kbd_key_t {
   }
 
   void lower_damper() {
+
     this->dstate = damper_state_e::DAMPER_DOWN;
+    return; // for now
     Serial.printf("Damp note %s\r\n", this->fmt_note().c_str());
     Serial.printf("The current level is %d\r\n" +
                   (int32_t)this->sensor->buf.latest().value);

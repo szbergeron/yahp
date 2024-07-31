@@ -350,6 +350,7 @@ float gather_gbl_val(String msg, key_calibration_t &kc, sensorspec_t &ssp) {
 }
 
 global_key_config_t gbl_config(keyboardspec_t &spec) {
+  Serial.println("making global");
   sensorspec_t *sensor = nullptr;
   boardspec_t *board = nullptr;
   key_spec_t *key = nullptr;
@@ -419,10 +420,10 @@ OUT:
 
 tempkey_t select_key(tempboards_t &boards) {
   uint16_t baselines[NUM_BOARDS][KEYS_PER_BOARD];
-  for(size_t b = 0; b < NUM_BOARDS; b++) {
-      for(size_t k = 0; k < KEYS_PER_BOARD; k++) {
-          baselines[b][k] = 0x9FFF;
-      }
+  for (size_t b = 0; b < NUM_BOARDS; b++) {
+    for (size_t k = 0; k < KEYS_PER_BOARD; k++) {
+      baselines[b][k] = 0x9FFF;
+    }
   }
 
   for (size_t b = 0; b < boards.boards.size(); b++) {
@@ -448,7 +449,9 @@ tempkey_t select_key(tempboards_t &boards) {
         uint16_t baseline = baselines[b][knum];
         uint16_t val = analogRead(pin);
         if (val > baseline + 50) {
-            Serial.printf("baseline was %d, val found was %d, on bnum %d pin %d\r\n", (int)baseline, (int)val, (int)bnum, (int)pin);
+          Serial.printf(
+              "baseline was %d, val found was %d, on bnum %d pin %d\r\n",
+              (int)baseline, (int)val, (int)bnum, (int)pin);
           return tempkey_t(bnum, pin);
         }
       }
@@ -459,7 +462,7 @@ tempkey_t select_key(tempboards_t &boards) {
 keyboardspec_t key_calibration() {
   auto boards = detect_boards();
 
-  //auto key_presence = detect_keys(boards);
+  // auto key_presence = detect_keys(boards);
 
   samplerspec_t samplerspec;
   vector_t<key_spec_t, KEY_COUNT_MAX> keys;
@@ -470,15 +473,14 @@ keyboardspec_t key_calibration() {
                  "minimum on an 88 key keyboard is 21)",
                  0, 127, 45);
 
-  auto midi_channel = prompt_int("What midi channel should notes play on by default?", 0, 16, 1);
+  auto midi_channel = prompt_int(
+      "What midi channel should notes play on by default?", 0, 16, 1);
 
   auto num_keys = prompt_int("How many keys does your piano have?", 0,
                              127 - start_midi, min(88, 127 - start_midi));
 
-
-
   uint32_t csid = 0;
-  for (uint8_t midi_num = start_midi; midi_num < midi_num + num_keys;
+  for (uint32_t midi_num = start_midi; midi_num < start_midi + num_keys;
        midi_num++) {
     auto n = format_note(midi_num);
     Serial.printf("Configuring note %s (midi id %d)\r\n", n.c_str(),
@@ -507,20 +509,22 @@ keyboardspec_t key_calibration() {
     keys.push_back(k);
   }
 
-  while(confirm("Do you have an additional pedal to add?", false)) {
-      eloop("aaaaaaa");
+  while (confirm("Do you have an additional pedal to add?", false)) {
+    Serial.println("Not implemented");
   }
 
   return keyboardspec_t(samplerspec, keys, pedals);
 }
 
-result_t<JsonDocument, unit_t> json_from_sd(const char *name) {
-  const size_t JSON_FILE_MAX_LENGTH = 32000;
-  char JSON_FILE[JSON_FILE_MAX_LENGTH];
+const size_t JSON_FILE_MAX_LENGTH = 32000;
+char JSON_FILE[JSON_FILE_MAX_LENGTH];
+
+result_t<JsonDocument*, unit_t> json_from_sd(const char *name) {
+    Serial.println("Grabbing json from sd");
 
   if (!SD.exists(name)) {
     Serial.println("No config on SD");
-    return result_t<JsonDocument, unit_t>::err({});
+    return result_t<JsonDocument*, unit_t>::err({});
   }
 
   auto f = SD.open(name, FILE_READ);
@@ -533,10 +537,14 @@ result_t<JsonDocument, unit_t> json_from_sd(const char *name) {
 
   f.close();
 
-  JsonDocument doc;
-  deserializeJson(doc, JSON_FILE);
+  Serial.println("done loading file");
 
-  return result_t<JsonDocument, unit_t>::ok(doc);
+  JsonDocument *doc = new JsonDocument;
+  deserializeJson(*doc, JSON_FILE);
+
+  Serial.println("deserialized");
+
+  return result_t<JsonDocument*, unit_t>::ok(doc);
 }
 
 void json_to_sd(const char *name, JsonDocument doc) {
@@ -553,8 +561,9 @@ static fullspec_t get_spec() {
   {
     auto r = json_from_sd("calibration.json");
     if (r.is_ok()) {
+      Serial.println("Loaded calibration json file");
       // we already have sampler then
-      s = keyboardspec_t(r.unwrap().as<JsonObject>());
+      s = keyboardspec_t((*r.unwrap()).as<JsonObject>());
       //
     } else {
       s = key_calibration();
@@ -566,12 +575,14 @@ static fullspec_t get_spec() {
     }
   }
 
+  Serial.println("Loaded calibration data");
+
   global_key_config_t gbl;
   {
     auto r2 = json_from_sd("global.json");
     if (r2.is_ok()) {
       // return samplerspec_t(r.unwrap().as<JsonObject>());
-      gbl = global_key_config_t(r2.unwrap().as<JsonObject>());
+      gbl = global_key_config_t((*r2.unwrap()).as<JsonObject>());
     } else {
       gbl = gbl_config(s);
       json_to_sd("global.json", gbl.to_json());

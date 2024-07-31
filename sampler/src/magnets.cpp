@@ -113,12 +113,13 @@ template <uint32_t POINTS> struct interpolater_t {
 template <uint32_t INPUT_POINTS, uint32_t OUTPUT_POINTS>
 interpolater_t<OUTPUT_POINTS>
 interpolater_from_many_points(vector_t<point_t, INPUT_POINTS> &inputs) {
-  vector_t<point_t, INPUT_POINTS> sorted;
+  Serial.printf("Input number of points is %d\n\r", inputs.size());
+  Serial.println("Going to sort");
   vector_t<point_t, OUTPUT_POINTS> outputs;
 
   // first, sort it by x
   for (uint32_t i = 0; i < inputs.size(); i++) {
-    for (int j = i + 1; i < inputs.size(); j++) {
+    for (int j = i + 1; j < inputs.size(); j++) {
       auto p_a = inputs[i];
       auto p_b = inputs[j];
 
@@ -128,11 +129,14 @@ interpolater_from_many_points(vector_t<point_t, INPUT_POINTS> &inputs) {
       }
     }
   }
+  Serial.println("Sorted points");
 
   // now, split into ranges
   size_t stride = inputs.size() / OUTPUT_POINTS;
 
-  for (size_t range_start; range_start < inputs.size(); range_start += stride) {
+  Serial.printf("Found stride of %d\n\r", stride);
+
+  for (size_t range_start = 0; range_start < inputs.size(); range_start += stride) {
     size_t count = 0;
     float sum_x = 0;
     float sum_y = 0;
@@ -149,6 +153,7 @@ interpolater_from_many_points(vector_t<point_t, INPUT_POINTS> &inputs) {
 
     outputs.push_back({x, y});
   }
+  Serial.println("Filling in with correct point count");
 
   return interpolater_t<OUTPUT_POINTS>(outputs);
 }
@@ -401,10 +406,11 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
                  "same point as before.");
 
   // just make it nice and big
-  longsample_buf_t<4096> buf;
+  const int BUF_SIZE = 4096;
+  vector_t<longsample_t, BUF_SIZE> buf;
 
   // first, start sampling into a ring
-  longsample_buf_t<512> ring;
+  longsample_buf_t<2056> ring;
 
   // need to detect the first falling edge when dropping the hammer,
   // but don't want to accidentally trigger on noise,
@@ -412,7 +418,7 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
 
   while (true) {
     float v = analogRead(pin);
-    if (v >= rough_max) {
+    if (v >= rough_max - 30) {
       break;
     }
   }
@@ -424,7 +430,8 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
   float midpoint = ((rough_max - initial_resting) / 2) + initial_resting;
   // until buf full
   uint32_t midpoint_pos = 0;
-  while (buf.size < 4095) {
+  while (buf.size() < buf.max_size()) {
+    delayMicroseconds(500);
     float v = analogRead(pin);
     uint32_t t = micros() - start;
     longsample_t s(v, t);
@@ -433,35 +440,41 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
 
       if (v < midpoint) {
         passed_midpoint = true;
+        Serial.println("Just passed midpoint");
         // move them all over, do processing later
-        for (uint32_t i = 0; i < ring.size; i++) {
-          buf.add_sample(ring.read_nth_oldest(i));
+        for (int32_t i = ring.size - 1; i >= 0; i--) {
+          if (buf.full()) {
+            eloop("horrible state");
+          }
+          buf.push_back(ring.read_nth_oldest(i));
         }
+        midpoint_pos = buf.size();
       }
     } else {
-      midpoint_pos++;
-      buf.add_sample(s);
+      buf.push_back(s);
     }
   }
+
+  Serial.printf("Gathered %d datapoints\r\n", buf.size());
 
   Serial.println("Data gathered, processing...");
 
   // probably won't take this many samples, but can still do
 
-  uint32_t start_pos;
-  uint32_t end_pos;
+  uint32_t start_pos = 0;
+  uint32_t end_pos = buf.size();
 
-  // need to find the points that mark the start and end
-  for (uint32_t i = midpoint_pos; i < buf.size - 10; i++) {
-    if (buf.read_nth_oldest(i).value <= initial_resting + 10) {
+  for (int32_t i = midpoint_pos; i > 0; i--) {
+    if (buf[i].value >= rough_max - 10) {
       start_pos = i;
       break;
     }
   }
 
-  for (uint32_t i = midpoint_pos; i > 10; i--) {
-    auto val = buf.read_nth_oldest(i).value;
-    if (val > rough_max - 10) {
+  Serial.println("Got first bound, finding second...");
+
+  for (int32_t i = midpoint_pos; i < buf.size(); i++) {
+    if (buf[i].value <= initial_resting + 10) {
       end_pos = i;
       break;
     }
@@ -469,13 +482,15 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
 
   Serial.printf("Found endpoints: %d, %d\r\n", start_pos, end_pos);
 
-  vector_t<longsample_t, 4096> fall;
+  vector_t<longsample_t, BUF_SIZE> fall;
 
   // now, we have our bounds
-  for (uint32_t i = start_pos; i >= end_pos; i--) {
+  for (uint32_t i = start_pos; i <= end_pos; i++) {
     // backwards, because buf is a forgetful queue
-    fall.push_back(buf.read_nth_oldest(i));
+    fall.push_back(buf[i]);
   }
+
+  Serial.printf("Created fall buf with size %d\r\n", fall.size());
 
   // now, figure out what the points _should_ be
   // in terms of actual "distance" according to
@@ -488,12 +503,14 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
   float initial_distance = 0;
   auto t_0 = fall.at(0).time;
 
-  vector_t<point_t, 4096> datapoints;
+  vector_t<point_t, BUF_SIZE> datapoints;
 
   // TODO: is this right? do I need to know if these are 0 vs uninit?
   float height_max = 0;
-  float height_min = 0xFFFFFF; // eh
+  float height_min = 999999; // eh
 
+  float val_max = 0;
+  float val_min = 999999;
   for (auto &sample : fall) {
     uint32_t t_i = sample.time - t_0;
     float t_if = (float)t_i / 1000000; // convert micros to seconds
@@ -501,22 +518,30 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
     float height =
         0.5 * g * (t_if * t_if) + (initial_velocity * t_if) + initial_distance;
 
-    point_t p(sample.value, height);
+    point_t p((float)sample.value, height);
 
     datapoints.push_back(p);
 
     // only falling downward, I hope
     height_max = max(p.y, height_max);
     height_min = min(p.y, height_min);
+    val_max = max(p.x, val_max);
+    val_min = max(p.x, val_min);
   }
 
-  Serial.println("Gravity simulation complete, now normalizing range...");
+  Serial.printf("Height span is %f to %f mm\r\n", height_min * 1000, height_max * 1000);
+  
+  //Serial.printf("Created x-y dp vec with size %d\r\n", datapoints.size());
+
 
   // normalize distance to between 0 and 1,
   // 1 being the highest (closest to sensor), 0 being the "bottom"
   // the datapoints currently should have a max near 0,
   // and a min somewhere in the negatives
   float range = height_max - height_min;
+
+  Serial.printf("Range is %f mm\r\n", range * 1000);
+  Serial.println("Gravity simulation complete, now normalizing points to within range...");
   for (auto &p : datapoints) {
     float cur_p = p.y;
 
@@ -529,8 +554,9 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
 
   // set up an interpolater that can reduce this large sample down to a small
   // number of control points
-  auto itp = interpolater_from_many_points<4096, MAGNET_INTERPOLATOR_POINTS>(
-      datapoints);
+  auto itp =
+      interpolater_from_many_points<BUF_SIZE, MAGNET_INTERPOLATOR_POINTS>(
+          datapoints);
 
   Serial.println("Got output profile:");
   for (auto pt : itp.points) {

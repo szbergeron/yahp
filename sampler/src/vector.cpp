@@ -95,7 +95,7 @@ public:
   iterator begin() { return iterator(reinterpret_cast<T *>(this->elements)); }
 
   iterator end() {
-    return iterator(reinterpret_cast<T *>(this->elements), MAX_LEN);
+    return iterator(reinterpret_cast<T *>(this->elements), this->cur_len);
   }
 
   result_t<T, unit_t> pop_back() {

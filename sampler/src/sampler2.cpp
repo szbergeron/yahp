@@ -85,10 +85,7 @@ template <uint32_t BUFSIZE = SAMPLE_BUFFER_LENGTH> struct sample_buf_t {
       auto idx = offsetted % BUFSIZE;
       // Serial.println("Returns idx: " + String(idx));
       res = this->buffer[idx];
-      // res = this->buffer[(n + this->begin) % SAMPLE_BUFFER_LENGTH];
     }
-
-    // print_value(res.value);
 
     return res;
   }

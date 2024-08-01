@@ -26,6 +26,49 @@ void blinkblink() {
   }
 }
 
+void testmode(tempboards_t &boards) {
+  while (true) {
+    Serial.println("1) fast toggle with numeric output");
+    Serial.println("2) toggle board on enter");
+    auto num = prompt_int("make choice:", 1, 3, 0);
+    if (num == 1) {
+      while (!newline_waiting()) {
+        for (auto &board : boards.boards) {
+          Serial.printf("Setting to board %d\r\n", (uint32_t)board);
+          set_board(board);
+          delayMicroseconds(50);
+
+          for (uint32_t ipin = 0; ipin < KEYS_PER_BOARD; ipin++) {
+            uint32_t val = analogRead(pins[ipin]);
+            Serial.printf("%04d ", val);
+          }
+          Serial.printf("\r\n");
+        }
+
+        delay(100);
+      }
+    } else if (num == 2) {
+      while (true) {
+        for (auto &board : boards.boards) {
+          Serial.printf("Setting to board %d\r\n", (uint32_t)board);
+          set_board(board);
+          delayMicroseconds(50);
+
+          while (!newline_waiting()) {
+            for (uint32_t ipin = 0; ipin < KEYS_PER_BOARD; ipin++) {
+              uint32_t val = analogRead(pins[ipin]);
+              Serial.printf("%04d ", val);
+            }
+            Serial.printf("\r");
+          }
+        }
+
+        delay(100);
+      }
+    }
+  }
+}
+
 tempboards_t detect_boards() {
   Serial.println("Getting board info");
   // const size_t LINE_LEN = 256;
@@ -137,174 +180,6 @@ detect_keys(tempboards_t &boards) {
   return info;
 }
 
-/*key_spec_t detect_range(uint8_t board_num, uint8_t sensor_num, uint8_t
-midi_num, uint32_t sensor_id) { set_board(board_num); analogReadResolution(10);
-  analogReadAveraging(2);
-  delayMicroseconds(100);
-
-  auto pin = pins[sensor_num];
-
-  auto note = format_note(midi_num);
-
-  Serial.println("Please press " + note + " at approximately a PP velocity");
-  Serial.println("Release the key fully after the strike");
-  delayMicroseconds(50);
-
-  int32_t rest_val = analogRead(pins[sensor_num]);
-  Serial.println("Min val: " + String(rest_val));
-
-  int32_t left_hyst = 50;
-  Serial.println();
-
-  bool should_configure = confirm("Configure this key?", true);
-
-  if (!should_configure) {
-    Serial.println("Nulling key...");
-    return key_spec_t(sensor_id, -1, -1, midi_num);
-  }
-
-  // wait for the value to rise
-  while (true) {
-    delayMicroseconds(50);
-    uint32_t val = analogRead(pin);
-    Serial.print("\r");
-    print_value(val, false);
-
-    if (val < (rest_val - left_hyst) || val > (rest_val + left_hyst)) {
-      break;
-    }
-  }
-
-  Serial.print("\r                                                             "
-               "                             \n\n\r");
-
-  // now, sample AFAP for 1 second and try to get the highest bound
-  auto start = elapsedMillis();
-
-  int32_t min_sense = rest_val;
-  int32_t max_sense = rest_val;
-
-  while (elapsedMillis(start) < 3000) {
-    int32_t val = analogRead(pin);
-
-    if (val > max_sense) {
-      max_sense = val;
-    }
-    if (val < min_sense) {
-      min_sense = val;
-    }
-
-    auto delta_min = myabs(rest_val - min_sense);
-    auto delta_max = myabs(rest_val - max_sense);
-    auto delta_val = myabs(val - rest_val);
-
-    // do an early exit when we know a strike and settle has occurred
-    // are we close to the resting point again?
-    if (delta_min > 150 && delta_min < 50 && delta_val < 50) {
-      break;
-    }
-    if (delta_max > 150 && delta_min < 50 && delta_val < 50) {
-      break;
-    }
-  }
-
-  auto delta_min = myabs(rest_val - min_sense);
-  auto delta_max = myabs(rest_val - max_sense);
-
-  int32_t min;
-  int32_t max;
-
-  if (delta_min < delta_max) {
-    min = min_sense;
-    max = max_sense;
-  } else {
-    min = max_sense;
-    max = min_sense;
-  }
-
-  Serial.println("Min:");
-  print_value(min, true);
-  Serial.println("Max:");
-  print_value(max, true);
-
-  Serial.printf("Got minimum value of %d, and maximum value of %d\n\r", min,
-                max);
-  Serial.flush();
-
-  bool retry = confirm("Do you want to retry?", false);
-
-  Serial.flush();
-
-  if (retry) {
-    Serial.println("Retry...");
-    return detect_range(board_num, sensor_num, midi_num, sensor_id);
-  } else {
-    Serial.println("Saving...");
-    return key_spec_t(sensor_id, min, max, midi_num);
-  }
-}*/
-
-/*keyboardspec_t
-detect_ranges(vector_t<vector_t<bool, KEYS_PER_BOARD>, NUM_BOARDS> &keys,
-              tempboards_t &boards) {
-
-  vector_t<boardspec_t, NUM_BOARDS> bspecs;
-  vector_t<key_spec_t, KEYS_PER_BOARD> kspecs;
-
-  uint32_t midi_num = FIRST_MIDI_NOTE;
-
-  uint32_t sensor_id = 0;
-
-  for (auto &b : keys) {
-    Serial.println("Keys size is " + String(b.size()));
-  }
-
-  for (size_t b = 0; b < boards.boards.size(); b++) {
-    uint8_t bnum = boards.boards[b];
-    auto &board_keys = keys.at(b);
-    Serial.println("Looking at board " + String(b));
-
-    vector_t<sensorspec_t, KEYS_PER_BOARD> sspecs;
-
-    Serial.println("Keys size is " + String(board_keys.size()));
-    for (size_t s = 0; s < board_keys.size(); s++) {
-      Serial.println("Doing detection for key at " + String(s));
-      bool kp = board_keys[s];
-
-      if (!kp) {
-        Serial.println("key not present");
-        Serial.flush();
-        continue;
-      }
-
-      // sense this key
-      key_spec_t ks = detect_range(bnum, s, midi_num, sensor_id);
-      sensorspec_t ss = sensorspec_t(sensor_id, pins[s]);
-
-      midi_num++;
-      sensor_id++;
-
-      if (ks.min_val < 0) {
-        Serial.printf("Skipping key %d on board %d\r\n", b, s);
-        continue;
-      }
-
-      kspecs.push_back(ks);
-      sspecs.push_back(ss);
-    }
-
-    boardspec_t bs(bnum, sspecs);
-
-    bspecs.push_back(bs);
-  }
-
-  samplerspec_t s(bspecs);
-
-  keyboardspec_t k(s, kspecs, {});
-
-  return k;
-}*/
-
 float gather_gbl_val(String msg, key_calibration_t &kc, sensorspec_t &ssp) {
   Serial.println(msg);
   Serial.println();
@@ -392,20 +267,6 @@ OUT:
   return gbl;
 }
 
-/*tempboards_t detect_boards2() {
-    for(uint8_t b = 0; b <= 255; b++) {
-        set_board(b);
-        delayMicroseconds(10);
-
-        // first, send a pulse out to bring output high
-        auto pin = pins[0];
-
-        pinMode(pin, OUTPUT);
-        digitalWrite(uint8_t pin, uint8_t val);
-
-    }
-}*/
-
 tempkey_t select_key(tempboards_t &boards) {
   uint16_t baselines[NUM_BOARDS][KEYS_PER_BOARD];
   for (size_t b = 0; b < NUM_BOARDS; b++) {
@@ -417,6 +278,7 @@ tempkey_t select_key(tempboards_t &boards) {
   for (size_t b = 0; b < boards.boards.size(); b++) {
     auto bnum = boards.boards[b];
     set_board(bnum);
+    delayMicroseconds(50);
 
     for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
       auto pin = pins[knum];
@@ -437,9 +299,9 @@ tempkey_t select_key(tempboards_t &boards) {
         uint16_t baseline = baselines[b][knum];
         uint16_t val = analogRead(pin);
         if (val > baseline + 50) {
-          Serial.printf(
-              "baseline was %d, val found was %d, on bnum %d pin %d\r\n",
-              (int)baseline, (int)val, (int)bnum, (int)pin);
+          Serial.printf("baseline was %d, val found was %d, on bnum %d pin %d, "
+                        "pin_index %d\r\n",
+                        (int)baseline, (int)val, (int)bnum, (int)pin);
           return tempkey_t(bnum, pin);
         }
       }
@@ -448,7 +310,18 @@ tempkey_t select_key(tempboards_t &boards) {
 }
 
 keyboardspec_t key_calibration() {
+  while (!newline_waiting()) {
+    delay(500);
+    Serial.println("Press enter to continue");
+  }
+
   auto boards = detect_boards();
+
+  if (confirm("enter test mode?", false)) {
+    testmode(boards);
+  }
+
+  bool fastcal = confirm("Do you want to use fastcal?", true);
 
   samplerspec_t samplerspec;
   vector_t<key_spec_t, KEY_COUNT_MAX> keys;
@@ -472,7 +345,7 @@ keyboardspec_t key_calibration() {
     auto n = format_note(midi_num);
     Serial.printf("Configuring note %s (midi id %d)\r\n", n.c_str(),
                   (int)midi_num);
-    bool in_use = confirm("Configure this key?", true);
+    bool in_use = fastcal || confirm("Configure this key?", true);
     if (!in_use) {
       continue;
     }
@@ -486,7 +359,7 @@ keyboardspec_t key_calibration() {
     Serial.printf("Key %s is assigned pin %d on board %d\r\n", n.c_str(),
                   (int)sensor.pin, (int)sensor.board);
 
-    auto interpolater = drop_test(sensor.board, sensor.pin);
+    auto interpolater = drop_test(sensor.board, sensor.pin, fastcal);
 
     uint32_t sid = csid++;
 

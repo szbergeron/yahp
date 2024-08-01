@@ -356,8 +356,11 @@ struct position_t {
     //float lra = linear_regression(before);
 }*/
 
-static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
-                                                            uint8_t pin) {
+static interpolater_t<MAGNET_INTERPOLATOR_POINTS>
+drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
+  const int32_t CROSSING_COUNT = 4;
+
+  float baseline = analogRead(pin);
 
   Serial.println("This step calibrates the native hammer range,");
   Serial.println("as well as the voltage response curve with respect to "
@@ -382,20 +385,45 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test(uint8_t bnum,
                  "press the enter key");
   Serial.clear();
 
+  bool above = false;
+  uint32_t middle_crossings = 0;
+
+  // how do we detect that the person has fully set the bounds?
+  // is there a better way than just waiting for newline
   while (true) {
     float v = analogRead(pin);
+
     rough_max = max(rough_max, v);
+    initial_resting = min(initial_resting, v);
 
     if (newline_waiting()) {
       break;
+    }
+
+    bool crosses = false;
+    if (v > baseline + 30 && !above) {
+      above = true;
+      crosses = true;
+    } else if (v < baseline && above) {
+      above = false;
+      crosses = true;
+    }
+
+    if (crosses) {
+      int32_t remaining = CROSSING_COUNT - middle_crossings;
+      if (remaining <= 0) {
+        break;
+      }
+      middle_crossings++;
+      Serial.printf("Crossed midpoint, remaining crosses: %d\r\n", remaining);
     }
   }
 
   Serial.printf("Found rough min %f and rough max %f\r\n", initial_resting,
                 rough_max);
-  if (!confirm("Is this acceptable?", true)) {
+  if (!(fastcal || confirm("Is this acceptable?", true))) {
     Serial.println("Retrying...");
-    return drop_test(bnum, pin);
+    return drop_test(bnum, pin, fastcal);
   }
 
   Serial.println("Now, we need to generate a fall profile for the hammer.");

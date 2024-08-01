@@ -336,10 +336,13 @@ struct kbd_key_t {
 
     float n = (v - c.min_velocity) / range;
     // abs func
-    n = (n < 0) ? -n : n;
+    // n = (n < 0) ? -n : n;
+    Serial.printf("Min %f, max %f, range %f, v %f, n %f\r\n", c.min_velocity,
+                  c.max_velocity, range, v, n);
 
-    return pow(n, 0.5);
-    // return std::sqrt(v);
+    //return n;
+
+     return pow(n, 0.7);
 
     /*
     // float p1x = c.bezier_p1x;

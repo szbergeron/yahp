@@ -1,15 +1,15 @@
 #include "pins_arduino.h"
 #define ENABLE_MIDI
 
-#include "utils.cpp"
 #include "ADC.h"
 #include "core_pins.h"
 #include "usb_midi.h"
+#include "utils.cpp"
 
 #include "calibrate.cpp"
 #include "keyboard.cpp"
-#include "sampler2.cpp"
 #include "magnets.cpp"
+#include "sampler2.cpp"
 #include <algorithm>
 
 #define YAHP_DEBUG
@@ -111,7 +111,9 @@ void configure_adc() {
   analogReadResolution(10);
 
   for (int i = 0; i < 8; i++) {
-    pinMode(i + 5, OUTPUT);
+    uint8_t pin = i + 5;
+    Serial.printf("Configures pin %d as output for boardsetting\r\n", pin);
+    pinMode(pin, OUTPUT);
   }
 }
 

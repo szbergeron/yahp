@@ -41,11 +41,22 @@ static inline void digitalWriteFaster(uint_fast8_t val, uint_fast8_t pin) {
 static inline void set_board(uint_fast8_t val) {
   uint8_t starting_pin = 5;
 
+
   // I am a dumbass and put the bits backwards in the board layout
-  for (uint8_t bit = 0; bit < 8; bit++) {
+  uint8_t bitnum = 0;
+  uint8_t pinnum = starting_pin + 7;
+  for(uint8_t i = 0; i < 8; i++) {
+      uint8_t bit = (val >> bitnum) & 0x1;
+      Serial.printf("writing bit %d with val %d to pin %d\r\n", (int)bitnum, (int)bit, (int)pinnum);
+      digitalWrite(bit, pinnum);
+      //digitalWriteFaster(bit, pinnum);
+      pinnum--;
+      bitnum++;
+  }
+  /*for (uint8_t bit = 0; bit < 8; bit++) {
     uint8_t bitval = (val >> (7 - bit)) & 0x1;
     digitalWriteFaster(bitval, starting_pin + bit);
-  }
+  }*/
 }
 
 [[gnu::noinline]] [[gnu::cold]] [[gnu::unused]] static void

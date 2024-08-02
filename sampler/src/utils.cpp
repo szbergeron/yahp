@@ -38,7 +38,7 @@ static inline void digitalWriteFaster(uint_fast8_t val, uint_fast8_t pin) {
       digital_pin_to_info_PGM[(pin)].mask;
 }
 
-static inline void set_board(uint_fast8_t val) {
+/*static inline void set_board(uint_fast8_t val) {
   uint8_t starting_pin = 5;
 
 
@@ -53,10 +53,27 @@ static inline void set_board(uint_fast8_t val) {
       pinnum--;
       bitnum++;
   }
-  /*for (uint8_t bit = 0; bit < 8; bit++) {
+  *for (uint8_t bit = 0; bit < 8; bit++) {
     uint8_t bitval = (val >> (7 - bit)) & 0x1;
     digitalWriteFaster(bitval, starting_pin + bit);
-  }*/
+  }*
+}*/
+
+// something is dumb and broken here, just reset it every
+// time to be safe
+static void set_board_pins() {
+    for(int i = 0; i < 8; i++) {
+        uint8_t pin = i + 5;
+        pinMode(pin, OUTPUT);
+    }
+}
+
+static void set_board(uint8_t num) {
+  for (int i = 0; i < 8; i++) {
+    uint8_t val = (num >> (7 - i)) & 0x1;
+    uint8_t pin = i + 5;
+    digitalWrite(pin, val);
+  }
 }
 
 [[gnu::noinline]] [[gnu::cold]] [[gnu::unused]] static void

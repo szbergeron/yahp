@@ -12,7 +12,7 @@
 #include "sampler2.cpp"
 #include <algorithm>
 
-#define YAHP_DEBUG
+//#define YAHP_DEBUG
 
 /*struct stats_t {
   float avg_ns = 0;
@@ -104,7 +104,7 @@ __attribute__((always_inline)) static inline void step_idle(uint32_t window_ns,
 void configure_adc() {
   for (int i = 0; i < KEYS_PER_BOARD; i++) {
     auto pin = pins[i];
-    pinMode(pin, INPUT);
+    pinMode(pin, INPUT_PULLDOWN);
   }
 
   analogReadAveraging(1);
@@ -174,7 +174,9 @@ void loop() {
   auto now = millis();
 
   if (now - lm > 400) {
+#ifdef YAHP_DEBUG
     Serial.println("looping...");
+#endif
     lm = now;
     state = !state;
     digitalWrite(LED_BUILTIN, state);

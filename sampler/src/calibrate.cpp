@@ -34,7 +34,7 @@ void testmode(tempboards_t &boards) {
     if (num == 1) {
       while (!newline_waiting()) {
         for (auto &board : boards.boards) {
-          Serial.printf("Setting to board %d\r\n", (uint32_t)board);
+          Serial.printf("\r\nSetting to board %d\r\n", (uint32_t)board);
           set_board(board);
           delayMicroseconds(50);
 
@@ -50,7 +50,7 @@ void testmode(tempboards_t &boards) {
     } else if (num == 2) {
       while (true) {
         for (auto &board : boards.boards) {
-          Serial.printf("Setting to board %d\r\n", (uint32_t)board);
+          Serial.printf("\r\nSetting to board %d\r\n", (uint32_t)board);
           set_board(board);
           delayMicroseconds(50);
 
@@ -268,17 +268,22 @@ OUT:
 }
 
 tempkey_t select_key(tempboards_t &boards) {
-  uint16_t baselines[NUM_BOARDS][KEYS_PER_BOARD];
+  analogReadResolution(10);
+  analogReadAveraging(16);
+
+  uint32_t baselines[NUM_BOARDS][KEYS_PER_BOARD];
   for (size_t b = 0; b < NUM_BOARDS; b++) {
     for (size_t k = 0; k < KEYS_PER_BOARD; k++) {
       baselines[b][k] = 0x9FFF;
     }
   }
 
+  delayMicroseconds(100);
+
   for (size_t b = 0; b < boards.boards.size(); b++) {
     auto bnum = boards.boards[b];
     set_board(bnum);
-    delayMicroseconds(50);
+    delayMicroseconds(100);
 
     for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
       auto pin = pins[knum];
@@ -292,18 +297,27 @@ tempkey_t select_key(tempboards_t &boards) {
     for (size_t b = 0; b < boards.boards.size(); b++) {
       auto bnum = boards.boards[b];
       set_board(bnum);
-      delayMicroseconds(5);
+      delayMicroseconds(100);
 
       for (size_t knum = 0; knum < KEYS_PER_BOARD; knum++) {
         auto pin = pins[knum];
-        uint16_t baseline = baselines[b][knum];
+        uint32_t baseline = baselines[b][knum];
         uint16_t val = analogRead(pin);
-        if (val > baseline + 50) {
+        if (val > baseline + 75) {
+          for (int i = 0; i < 16; i++) {
+            if ((uint32_t)analogRead(pin) < baseline + 75) {
+              Serial.printf("had a spurious spike, static?");
+              goto OUT;
+            }
+          }
           Serial.printf("baseline was %d, val found was %d, on bnum %d pin %d, "
                         "pin_index %d\r\n",
-                        (int)baseline, (int)val, (int)bnum, (int)pin);
+                        (int)baseline, (int)val, (int)bnum, (int)pin,
+                        (int)knum);
           return tempkey_t(bnum, pin);
         }
+      OUT:
+        continue;
       }
     }
   }
@@ -391,12 +405,12 @@ keyboard_t *make_kbd(fullspec_t spec) {
 }
 
 JsonDocument configure_offsets(fullspec_t &spec) {
+  auto kbd = make_kbd(spec);
+
   confirm("Hands off the keyboard! Hit enter once understood", true);
   delay(500);
 
   const uint32_t AVERAGES_COUNT = 500;
-
-  auto kbd = make_kbd(spec);
 
   for (uint32_t averages = 0; averages < AVERAGES_COUNT; averages++) {
     /*for (auto &key : spec.keyboard.keys) {
@@ -454,7 +468,7 @@ JsonDocument configure_offsets(fullspec_t &spec) {
   }
 }
 
-const size_t JSON_FILE_MAX_LENGTH = 32000;
+const size_t JSON_FILE_MAX_LENGTH = 64000;
 char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
 result_t<JsonDocument *, unit_t> json_from_sd(const char *name) {

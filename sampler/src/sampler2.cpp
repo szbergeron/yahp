@@ -406,6 +406,7 @@ struct board_t {
   board_t(boardspec_t &bspec, adcs_info_t &adcs_info)
       : board_num(bspec.board_num), adcs(adcs_info) {
     for (auto &keyc : bspec.sensors) {
+      Serial.printf("Creates sensor by id %d\r\n", keyc.sensor_id);
       sensor_t sensor(keyc.pin_num, keyc.sensor_id, keyc.curve);
       this->keys.push_back(sensor);
     }
@@ -431,6 +432,7 @@ struct sampler_t {
   sampler_t(ADC adc_, samplerspec_t &spec) : adc(new ADC(adc_)) {
     for (auto boardc : spec.boards) {
       adcs_info_t info(this->adc);
+      Serial.printf("Makes board: %d\r\n", (int)boardc.board_num);
       board_t b(boardc, info);
       this->boards.push_back(b);
     }
@@ -439,6 +441,7 @@ struct sampler_t {
   ~sampler_t() { delete this->adc; }
 
   void sample_round() {
+    set_board_pins();
     for (auto &board : this->boards) {
       board.do_round();
     }

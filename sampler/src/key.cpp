@@ -40,10 +40,12 @@ struct key_calibration_t {
 
     float val = (height - this->spec.bound_min) / range;
 
+#ifdef YAHP_DEBUG
     if (val > 2) [[unlikely]] {
       Serial.printf("weird? %f, %f, %f, %f\r\n", val, height,
                     this->spec.bound_min, this->spec.bound_max);
     }
+#endif
     // in ideal circumstances, this should return a value that falls
     // within [0, 1] and is, much more importantly, _consistent_ from key to key
 
@@ -172,12 +174,15 @@ struct kbd_key_t {
     case key_state_e::KEY_READY:
       if (hammer_position > this->global_key_config.letoff) {
         // go to critical
+#ifdef YAHP_DEBUG
         Serial.printf("Goes to critical with value %f\r\n", hammer_position);
+#endif
         this->strike_buf.add_sample(corrected); // don't lose that one!
         this->strike_buf.clear();               // ready it here
         this->kstate = key_state_e::KEY_CRITICAL;
       } else if (hammer_position < this->global_key_config.active) {
         // drop to resting
+        Serial.printf("sensor %d goes to resting \r\n", this->sensor->sensor_id);
         this->sensor->priority = sensor_t::poll_priority_e::RELAXED;
         this->kstate = key_state_e::KEY_RESTING;
       }
@@ -233,7 +238,7 @@ struct kbd_key_t {
     // usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
     auto note = this->calibration.spec.midi_note;
     auto channel = this->calibration.spec.midi_channel;
-    usbMIDI.sendAfterTouchPoly(note, 127, channel);
+    usbMIDI.sendAfterTouchPoly(note + this->global_key_config.transpose, 127, channel);
 #endif
   }
 
@@ -247,13 +252,15 @@ struct kbd_key_t {
 #if defined(ENABLE_MIDI)
     auto note = this->calibration.spec.midi_note;
     auto channel = this->calibration.spec.midi_channel;
-    usbMIDI.sendNoteOff(note, 127, channel);
+    usbMIDI.sendNoteOff(note + this->global_key_config.transpose, 127, channel);
     // usbMIDI.send_now();
 #endif
   }
 
   float linear_regression(vector_t<sample_t, STRIKE_BUF_SIZE> &points) {
+#ifdef YAHP_DEBUG
     Serial.printf("Have %d datapoints to work with\r\n", points.size());
+#endif
     // subtract time of the first point, and value of the minimum
     uint32_t min_x = points.back().time;
 
@@ -269,11 +276,16 @@ struct kbd_key_t {
     float sum_xmy = 0;
     float sum_xmx = 0;
     float n = points.size();
+
+#ifdef YAHP_DEBUG
     Serial.println("Profile:");
+#endif
     for (auto point : points) {
       float x = point.time - min_x;
       float y = point.height;
+#ifdef YAHP_DEBUG
       Serial.printf("%f @ %f\r\n", y, x);
+#endif
       sum_x += x;
       sum_y += y;
       sum_xmy += x * y;
@@ -282,8 +294,6 @@ struct kbd_key_t {
 
     float m_x = sum_x / n;
     float m_y = sum_y / n;
-
-    // Serial.println("Means: " + String(m_x) + ", " + String(m_y));
 
     float SS_xy = sum_xmy - (n * m_y * m_x);
     float SS_xx = sum_xmx - (n * m_x * m_x);
@@ -301,6 +311,10 @@ struct kbd_key_t {
     // if this costs us
     for (uint32_t i = 0; i < this->strike_buf.size; i++) {
       ar.push_back(this->strike_buf.read_nth_oldest(i));
+    }
+
+    if(ar.size() < 2) {
+        Serial.println("Strike array was too small to get get a reasonable value, is teensy overwhelmed?");
     }
 
     float slope = this->linear_regression(ar);
@@ -322,7 +336,7 @@ struct kbd_key_t {
     Serial.println("Sends velocity: " + String(midi_velocity));
     Serial.println("Sent note on! Channel: " + String(channel));
     Serial.printf("Note on for %d\r\n", note);
-    usbMIDI.sendNoteOn(note, midi_velocity, channel);
+    usbMIDI.sendNoteOn(note + this->global_key_config.transpose, midi_velocity, channel);
 #endif
   }
 
@@ -342,7 +356,7 @@ struct kbd_key_t {
 
     //return n;
 
-     return pow(n, 0.7);
+     return pow(n, 0.5);
 
     /*
     // float p1x = c.bezier_p1x;

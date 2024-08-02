@@ -42,7 +42,7 @@ template <uint32_t POINTS> struct interpolater_t {
   inline float interpolate(float x) {
     uint32_t idx = 0;
     for (; idx < POINTS; idx++) {
-      if (this->points[idx].x > x) [[unlikely]] {
+      if (this->points[idx].x > x) {
         break;
       }
     }
@@ -79,12 +79,14 @@ template <uint32_t POINTS> struct interpolater_t {
 
     float nv = top / bottom;
 
+#ifdef YAHP_DEBUG
     if (nv > 2) [[unlikely]] {
       Serial.printf("inner weird? nv %f, top %f, btm %f, pbx %f, pax %f,"
                     "pby %f, pay %f, x %f, i_a %d, i_b %d, pts %d\r\n",
                     nv, top, bottom, p_b.x, p_a.x, p_b.y, p_a.y, x, i_a, i_b,
                     this->points.size());
     }
+#endif
 
     return nv;
   }
@@ -358,6 +360,12 @@ struct position_t {
 
 static interpolater_t<MAGNET_INTERPOLATOR_POINTS>
 drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
+  set_board(bnum);
+  delayMicroseconds(10);
+  analogReadAveraging(16);
+  analogReadResolution(10);
+  pinMode(pin, INPUT_PULLDOWN);
+
   const int32_t CROSSING_COUNT = 4;
 
   float baseline = analogRead(pin);
@@ -365,12 +373,6 @@ drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
   Serial.println("This step calibrates the native hammer range,");
   Serial.println("as well as the voltage response curve with respect to "
                  "distance of the sensors");
-
-  set_board(bnum);
-  delayMicroseconds(10);
-  analogReadAveraging(16);
-  analogReadResolution(10);
-  pinMode(pin, INPUT);
 
   // first collect the down position,
   // to serve as a reference point for middle-crossing
@@ -492,6 +494,9 @@ drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
       }
     } else {
       buf.push_back(s);
+      if(s.value < initial_resting + 10) {
+          break;
+      }
     }
   }
 

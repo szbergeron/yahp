@@ -23,8 +23,8 @@ const int SAMPLE_BATCH_TYPICAL_SIZE =
         // this can be tuned based on how many notes are
         // going to be due per batch in a reasonable worst-case
         // scenario (requiring an allocation if it exceeds this)
-const uint32_t MAX_STALENESS_MICROS = 500;
-const uint32_t MIN_STALENESS_MICROS = 200;
+const uint32_t MAX_STALENESS_MICROS = 350;
+const uint32_t MIN_STALENESS_MICROS = 120;
 const uint32_t KEY_COUNT_MAX = 97;
 const uint32_t PEDAL_COUNT_MAX = 4;
 const uint32_t CONTRIB_WINDOW = 2;
@@ -131,6 +131,8 @@ struct global_key_config_t {
   float max_velocity = 0.29;
   float min_velocity = 0;
 
+  int32_t transpose = 12;
+
   // just...flat?
   float bezier_p1x = 0;
   float bezier_p1y = 0;
@@ -147,7 +149,7 @@ struct global_key_config_t {
       : active(j["active"]), letoff(j["letoff"]), strike(j["strike"]),
         repetition(j["repetition"]), damper_up(j["damper_up"]),
         damper_down(j["damper_down"]), max_velocity(j["max_velocity"]),
-        min_velocity(j["min_velocity"]) {}
+        min_velocity(j["min_velocity"]), transpose(j["transpose"]) {}
 
   JsonDocument to_json() {
     JsonDocument d;
@@ -160,6 +162,7 @@ struct global_key_config_t {
     d["damper_down"] = this->damper_down;
     d["max_velocity"] = this->max_velocity;
     d["min_velocity"] = this->min_velocity;
+    d["transpose"] = this->transpose;
 
     return d;
   }
@@ -272,13 +275,13 @@ struct samplerspec_t {
   }
 
   tempkey_t find_tempkey(uint32_t sid) {
-      for(auto &board: this->boards) {
-          for(auto &sensor : board.sensors) {
-              if(sensor.sensor_id == sid) {
-                  return tempkey_t(board.board_num, sensor.pin_num);
-              }
-          }
+    for (auto &board : this->boards) {
+      for (auto &sensor : board.sensors) {
+        if (sensor.sensor_id == sid) {
+          return tempkey_t(board.board_num, sensor.pin_num);
+        }
       }
+    }
   }
 
   boardspec_t &get_board(uint8_t bnum) {
@@ -288,7 +291,8 @@ struct samplerspec_t {
       }
     }
 
-    this->boards.push_back(boardspec_t());
+    this->boards.push_back(boardspec_t(bnum, {}));
+
     return this->boards.back();
   }
 
@@ -296,9 +300,12 @@ struct samplerspec_t {
     auto ja = j["boards"].as<JsonArray>();
 
     for (auto ent : ja) {
+      Serial.printf("Found board in json\r\n");
       boardspec_t b(ent.as<JsonObject>());
       this->boards.push_back(b);
     }
+
+    Serial.printf("Done adding boards\r\n");
   }
 
   JsonDocument to_json() {

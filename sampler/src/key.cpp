@@ -315,10 +315,26 @@ struct kbd_key_t {
 
     if(ar.size() < 2) {
         Serial.println("Strike array was too small to get get a reasonable value, is teensy overwhelmed?");
+        return;
+    }
+    Serial.printf("Found an ar with size %d\r\n", ar.size());
+
+    if(ar.size() < 50) {
+        for(auto& val: ar) {
+            Serial.printf("Corrected val: %f\r\n", val.height);
+        }
     }
 
     float slope = this->linear_regression(ar);
+
+
     float normalized_velocity = this->map_velocity(slope);
+
+    if(normalized_velocity > 2) {
+        Serial.println("Got a very weird value processing strike, so refusing to send loud note");
+        return;
+    }
+
 
     uint32_t midi_velocity = normalized_velocity * 128;
     if (midi_velocity > 127) {

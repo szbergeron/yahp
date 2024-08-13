@@ -8,7 +8,7 @@
 #ifndef YAHP_MAGNETS
 #define YAHP_MAGNETS
 
-const size_t MAGNET_INTERPOLATOR_POINTS = 16;
+const size_t MAGNET_INTERPOLATOR_POINTS = 32;
 
 struct longsample_t {
   float value;
@@ -358,6 +358,121 @@ struct position_t {
     //float lra = linear_regression(before);
 }*/
 
+static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test2(uint8_t bnum, uint8_t pin, bool fastcal) {
+  set_board(bnum);
+  delayMicroseconds(10);
+  analogReadAveraging(16);
+  analogReadResolution(10);
+  pinMode(pin, INPUT_PULLDOWN);
+
+  const int32_t CROSSING_COUNT = 2;
+
+  float baseline = analogRead(pin);
+
+  Serial.println("This step calibrates the native hammer range,");
+  Serial.println("as well as the voltage response curve with respect to "
+                 "distance of the sensors");
+
+  // first collect the down position,
+  // to serve as a reference point for middle-crossing
+  float initial_resting = analogRead(pin);
+  float rough_max = initial_resting;
+
+  Serial.println("Now lift the hammer, until you can feel it pressing on the "
+                 "felt but without too much effort");
+  Serial.println("Don't try to deform the felt--when the hammer drops, it "
+                 "should not be accelerated by the felt");
+  Serial.println("You can release the hammer once you've done so, and then "
+                 "press the enter key");
+  Serial.clear();
+
+  bool above = false;
+  uint32_t middle_crossings = 0;
+
+  // how do we detect that the person has fully set the bounds?
+  // is there a better way than just waiting for newline
+  while (true) {
+    float v = analogRead(pin);
+
+    rough_max = max(rough_max, v);
+    initial_resting = min(initial_resting, v);
+
+    if (newline_waiting()) {
+      break;
+    }
+
+    bool crosses = false;
+    if (v > baseline + 30 && !above) {
+      above = true;
+      crosses = true;
+    } else if (v < baseline && above) {
+      above = false;
+      crosses = true;
+    }
+
+    if (crosses) {
+      int32_t remaining = CROSSING_COUNT - middle_crossings;
+      if (remaining <= 0) {
+        break;
+      }
+      middle_crossings++;
+      Serial.printf("Crossed midpoint, remaining crosses: %d\r\n", remaining);
+    }
+  }
+
+  Serial.printf("Found rough min %f and rough max %f\r\n", initial_resting,
+                rough_max);
+  if (!(fastcal || confirm("Is this acceptable?", true))) {
+    Serial.println("Retrying...");
+    return drop_test2(bnum, pin, fastcal);
+  }
+
+  Serial.println("Now, we need to generate a fall profile for the hammer.");
+  Serial.println("This will continuously sample sensor voltage, and will "
+                 "trigger a capture once");
+  Serial.println("the voltage falls to a 25% mark, which should be roughly "
+                 "at half-travel.");
+  Serial.println();
+  Serial.println("First, secure the back of the key itself. If the key is "
+                 "allowed to move with");
+  Serial.println("the hammer, it affects the fall speed such that it no "
+                 "longer sufficiently");
+  Serial.println("obeys free-body, free-fall properties. Make sure the jack "
+                 "and whippen");
+  Serial.println("do not follow the hammer up when you lift it, and do not "
+                 "make contact");
+  Serial.println("again until the hammer falls back to its resting position");
+  Serial.println();
+  Serial.println("Whenever you're ready, lift the hammer back to about the "
+                 "same point as before.");
+
+  const int BUF_SIZE = 4096;
+  vector_t<longsample_t, BUF_SIZE> buf;
+  longsample_buf_t<BUF_SIZE> ring;
+
+  while (true) {
+    float v = analogRead(pin);
+    if (v >= rough_max - 30) {
+      break;
+    }
+  }
+
+  Serial.println("Now, release the hammer and allow it to fall until it rests");
+  auto start = micros();
+
+  bool passed_midpoint = false;
+  float midpoint = ((rough_max - initial_resting) / 2) + initial_resting;
+
+  uint32_t midpoint_pos = 0;
+
+  while(buf.size() < buf.max_size()) {
+      if(passed_midpoint == true) {
+          // check if we've settled at the bottom
+          //
+      }
+  }
+}
+
 static interpolater_t<MAGNET_INTERPOLATOR_POINTS>
 drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
   set_board(bnum);
@@ -366,7 +481,7 @@ drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
   analogReadResolution(10);
   pinMode(pin, INPUT_PULLDOWN);
 
-  const int32_t CROSSING_COUNT = 4;
+  const int32_t CROSSING_COUNT = 2;
 
   float baseline = analogRead(pin);
 

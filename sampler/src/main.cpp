@@ -118,7 +118,7 @@ void configure_adc() {
 }
 
 void setup() {
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 5; i++) {
     delay(700);
     digitalToggle(LED_BUILTIN);
     Serial.println("Waiting...");
@@ -137,6 +137,13 @@ void setup() {
 
   Serial.println("Setting up...");
   fullspec_t spec = get_spec();
+
+  if(newline_waiting()) {
+      bool test_mode = confirm("try test mode?", false);
+      if(test_mode) {
+          testmode_entry();
+      }
+  }
 
   Serial.println("Making adc/sampler/keyboard...");
   ADC adc;
@@ -162,10 +169,23 @@ void setup() {
   // usbMIDI.begin();
 }
 
+void poll_rarely() {
+  if (newline_waiting()) {
+    // enter config menu?
+  }
+}
+
 uint32_t lm = 0;
 bool state = false;
 
+uint32_t lc = 0;
+
 void loop() {
+  lc++;
+
+  if (lc % 10000 == 0) {
+    poll_rarely();
+  }
   // discard shit
   /*while (usbMIDI.read()) {
     // ignore incoming messages

@@ -323,6 +323,11 @@ tempkey_t select_key(tempboards_t &boards) {
   }
 }
 
+void testmode_entry() {
+  auto boards = detect_boards();
+  testmode(boards);
+}
+
 keyboardspec_t key_calibration() {
   while (!newline_waiting()) {
     delay(500);

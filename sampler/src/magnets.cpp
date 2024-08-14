@@ -464,11 +464,13 @@ static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test2(uint8_t bnum, uint8
   float midpoint = ((rough_max - initial_resting) / 2) + initial_resting;
 
   uint32_t midpoint_pos = 0;
+  float slope_at_mid = 0;
 
   while(buf.size() < buf.max_size()) {
       if(passed_midpoint == true) {
           // check if we've settled at the bottom
           //
+      } else {
       }
   }
 }

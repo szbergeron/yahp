@@ -362,6 +362,8 @@ struct board_t {
         sample_t s(v_b, ts_b);
         a.sensor->add_sample(s);
       }
+#elif defined(FASTREAD2)
+      //
 #else
       // Serial.println("Adding round");
       if (a.is_real() && b.is_real()) {

@@ -12,7 +12,7 @@
 #include "sampler2.cpp"
 #include <algorithm>
 
-//#define YAHP_DEBUG
+// #define YAHP_DEBUG
 
 /*struct stats_t {
   float avg_ns = 0;
@@ -57,6 +57,18 @@ struct idler_t {
         }
       }
     }
+
+    /*
+    for (pedal_t &p : this->keyboard->pedals) {
+      p.process_sample();
+
+      if (!run_all) {
+        if (micros() - start > window) {
+          break;
+        }
+      }
+    }
+    */
 
     if (run_all) {
       // usbMIDI.send_now();
@@ -138,11 +150,11 @@ void setup() {
   Serial.println("Setting up...");
   fullspec_t spec = get_spec();
 
-  if(newline_waiting()) {
-      bool test_mode = confirm("try test mode?", false);
-      if(test_mode) {
-          testmode_entry();
-      }
+  if (newline_waiting()) {
+    bool test_mode = confirm("try test mode?", false);
+    if (test_mode) {
+      testmode_entry();
+    }
   }
 
   Serial.println("Making adc/sampler/keyboard...");

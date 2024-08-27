@@ -74,6 +74,7 @@ public:
     if (idx >= this->cur_len) [[unlikely]] {
       Serial.printf("Tried to index to %d within a vec of size %d\r\n", idx,
                     this->cur_len);
+      Serial.printf("capacity is %d\r\n", MAX_LEN);
       eloop("idx out of range");
     }
 

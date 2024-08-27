@@ -8,7 +8,7 @@
 #ifndef YAHP_MAGNETS
 #define YAHP_MAGNETS
 
-const size_t MAGNET_INTERPOLATOR_POINTS = 32;
+const size_t MAGNET_INTERPOLATOR_POINTS = 36;
 
 struct longsample_t {
   float value;
@@ -41,7 +41,7 @@ template <uint32_t POINTS> struct interpolater_t {
 
   inline float interpolate(float x) {
     uint32_t idx = 0;
-    for (; idx < POINTS; idx++) {
+    for (; idx < this->points.size(); idx++) {
       if (this->points[idx].x > x) {
         break;
       }
@@ -59,7 +59,8 @@ template <uint32_t POINTS> struct interpolater_t {
     idx += 1 * (idx == 0);
     */
 
-    if (idx == POINTS) [[unlikely]] {
+    // off the end, so extrapolate
+    if (idx == this->points.size()) [[unlikely]] {
       i_a = idx - 2;
       i_b = idx - 1;
     } else if (idx == 0) [[unlikely]] {

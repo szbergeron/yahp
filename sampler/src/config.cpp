@@ -149,7 +149,15 @@ struct global_key_config_t {
       : active(j["active"]), letoff(j["letoff"]), strike(j["strike"]),
         repetition(j["repetition"]), damper_up(j["damper_up"]),
         damper_down(j["damper_down"]), max_velocity(j["max_velocity"]),
-        min_velocity(j["min_velocity"]), transpose(j["transpose"]) {}
+        min_velocity(j["min_velocity"]), transpose(j["transpose"]) {
+            if(!j.containsKey("transpose")) {
+                Serial.println("Didn't contain transpose val!");
+            }
+
+            if(!j.containsKey("active")) {
+                Serial.println("Also didn't contain active!");
+            }
+        }
 
   JsonDocument to_json() {
     JsonDocument d;

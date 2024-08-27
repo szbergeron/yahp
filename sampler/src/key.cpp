@@ -182,7 +182,8 @@ struct kbd_key_t {
         this->kstate = key_state_e::KEY_CRITICAL;
       } else if (hammer_position < this->global_key_config.active) {
         // drop to resting
-        Serial.printf("sensor %d goes to resting \r\n", this->sensor->sensor_id);
+        Serial.printf("sensor %d goes to resting \r\n",
+                      this->sensor->sensor_id);
         this->sensor->priority = sensor_t::poll_priority_e::RELAXED;
         this->kstate = key_state_e::KEY_RESTING;
       }
@@ -198,6 +199,7 @@ struct kbd_key_t {
         this->kstate = key_state_e::KEY_STRIKING;
         this->strike_millis = millis();
         this->process_strike();
+        Serial.println("done with strike");
       } else if (hammer_position < this->global_key_config.repetition) {
         this->kstate = key_state_e::KEY_READY;
       }
@@ -206,6 +208,7 @@ struct kbd_key_t {
     case key_state_e::KEY_STRIKING:
       bool settled = (millis() - this->strike_millis) > SETTLE_DELAY_MS;
       if (hammer_position < this->global_key_config.repetition && settled) {
+        Serial.println("Done with strike, and settled, so goes to ready");
         // only one way out \:)
         this->kstate = key_state_e::KEY_READY;
       }
@@ -238,7 +241,8 @@ struct kbd_key_t {
     // usbMIDI.sendAfterTouchPoly(70 + this->key_number, 1, 0);
     auto note = this->calibration.spec.midi_note;
     auto channel = this->calibration.spec.midi_channel;
-    usbMIDI.sendAfterTouchPoly(note + this->global_key_config.transpose, 127, channel);
+    usbMIDI.sendAfterTouchPoly(note + this->global_key_config.transpose, 127,
+                               channel);
 #endif
   }
 
@@ -313,28 +317,28 @@ struct kbd_key_t {
       ar.push_back(this->strike_buf.read_nth_oldest(i));
     }
 
-    if(ar.size() < 2) {
-        Serial.println("Strike array was too small to get get a reasonable value, is teensy overwhelmed?");
-        return;
+    if (ar.size() < 2) {
+      Serial.println("Strike array was too small to get get a reasonable "
+                     "value, is teensy overwhelmed?");
+      return;
     }
     Serial.printf("Found an ar with size %d\r\n", ar.size());
 
-    if(ar.size() < 50) {
-        for(auto& val: ar) {
-            Serial.printf("Corrected val: %f\r\n", val.height);
-        }
+    if (ar.size() < 50) {
+      for (auto &val : ar) {
+        Serial.printf("Corrected val: %f\r\n", val.height);
+      }
     }
 
     float slope = this->linear_regression(ar);
 
-
     float normalized_velocity = this->map_velocity(slope);
 
-    if(normalized_velocity > 2) {
-        Serial.println("Got a very weird value processing strike, so refusing to send loud note");
-        return;
+    if (normalized_velocity > 2) {
+      Serial.println("Got a very weird value processing strike, so refusing to "
+                     "send loud note");
+      return;
     }
-
 
     uint32_t midi_velocity = normalized_velocity * 128;
     if (midi_velocity > 127) {
@@ -352,7 +356,10 @@ struct kbd_key_t {
     Serial.println("Sends velocity: " + String(midi_velocity));
     Serial.println("Sent note on! Channel: " + String(channel));
     Serial.printf("Note on for %d\r\n", note);
-    usbMIDI.sendNoteOn(note + this->global_key_config.transpose, midi_velocity, channel);
+    Serial.printf("Transpose value of %d\r\n",
+                  this->global_key_config.transpose);
+    usbMIDI.sendNoteOn(note + this->global_key_config.transpose, midi_velocity,
+                       channel);
 #endif
   }
 
@@ -370,9 +377,9 @@ struct kbd_key_t {
     Serial.printf("Min %f, max %f, range %f, v %f, n %f\r\n", c.min_velocity,
                   c.max_velocity, range, v, n);
 
-    //return n;
+    // return n;
 
-     return pow(n, 0.5);
+    return pow(n, 0.5);
 
     /*
     // float p1x = c.bezier_p1x;

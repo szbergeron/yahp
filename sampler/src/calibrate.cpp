@@ -474,7 +474,7 @@ JsonDocument configure_offsets(fullspec_t &spec) {
 }
 
 const size_t JSON_FILE_MAX_LENGTH = 64000;
-char JSON_FILE[JSON_FILE_MAX_LENGTH];
+DMAMEM char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
 result_t<JsonDocument *, unit_t> json_from_sd(const char *name) {
   Serial.println("Grabbing json from sd");
@@ -488,7 +488,7 @@ result_t<JsonDocument *, unit_t> json_from_sd(const char *name) {
 
   size_t file_size = 0;
 
-  file_size = f.readBytes(JSON_FILE, JSON_FILE_MAX_LENGTH);
+  file_size = f.readBytes((char*)JSON_FILE, JSON_FILE_MAX_LENGTH);
 
   JSON_FILE[file_size] = 0; // null term
 
@@ -497,7 +497,7 @@ result_t<JsonDocument *, unit_t> json_from_sd(const char *name) {
   Serial.println("done loading file");
 
   JsonDocument *doc = new JsonDocument;
-  deserializeJson(*doc, JSON_FILE);
+  deserializeJson(*doc, (char*)JSON_FILE);
 
   Serial.println("deserialized");
 

@@ -1,5 +1,6 @@
 #include "ADC.h"
 #include "key.cpp"
+#include "pedal.cpp"
 #include "utils.cpp"
 
 #ifndef YAHP_KEYBOARD
@@ -7,6 +8,7 @@
 
 struct keyboard_t {
   vector_t<kbd_key_t, KEY_COUNT_MAX> keys;
+  vector_t<pedal_t, PEDAL_COUNT_MAX> pedals;
   // why a ptr?
   // we're self referential: keys point to sensors
   // we need the location of sensors to be

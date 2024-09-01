@@ -14,6 +14,7 @@
 #include "elapsedMillis.h"
 #include <cstddef>
 #include <cstdint>
+#include <ostream>
 
 #ifndef YAHP_CALIBRATE
 #define YAHP_CALIBRATE
@@ -328,6 +329,55 @@ void testmode_entry() {
   testmode(boards);
 }
 
+keyboardspec_t key_calibration2() {
+    while (!newline_waiting()) {
+      delay(500);
+      Serial.println("Press enter to continue");
+    }
+
+    auto boards = detect_boards();
+
+    uint32_t start_midi =
+        prompt_int("What is the lowest midi note on your piano? (Usually the "
+                   "minimum on an 88 key keyboard is 21)",
+                   0, 127, FIRST_MIDI_NOTE + 30);
+        uint32_t midi_channel = prompt_int(
+            "What midi channel should notes play on by default?", 0, 16, 1);
+
+    Serial.printf("Please play each key, one at a time, ascending from 0");
+    Serial.printf("When done, hit enter");
+
+    vector_t<tempkey_t, KEY_COUNT_MAX> ided_sensors;
+
+    vector_t<key_spec_t, KEY_COUNT_MAX> kspecs;
+    vector_t<boardspec_t, KEY_COUNT_MAX> bspecs;
+
+    size_t sensor_id = 0;
+
+    while(!newline_waiting()) {
+        auto k = select_key(boards);
+        if(ided_sensors.contains(k)) {
+            continue;
+        }
+
+        ided_sensors.push_back(k);
+
+        auto sid = sensor_id++;
+        auto mnid = start_midi++;
+        sensorspec_t(sid, k.pin, {});
+        key_spec_t(sid, mnid, midi_channel);
+
+        auto bn = k.board;
+
+        auto b = bspecs.find_by_or_insert([bn](const boardspec_t &b) { return bn == b.board_num; }, boardspec_t());
+
+    }
+
+}
+
+void more_calibration(fullspec_t fspec) {
+}
+
 keyboardspec_t key_calibration() {
   while (!newline_waiting()) {
     delay(500);
@@ -473,7 +523,7 @@ JsonDocument configure_offsets(fullspec_t &spec) {
   }
 }
 
-const size_t JSON_FILE_MAX_LENGTH = 64000;
+const size_t JSON_FILE_MAX_LENGTH = 250000;
 DMAMEM char JSON_FILE[JSON_FILE_MAX_LENGTH];
 
 result_t<JsonDocument *, unit_t> json_from_sd(const char *name) {
@@ -506,10 +556,9 @@ result_t<JsonDocument *, unit_t> json_from_sd(const char *name) {
 
 void json_to_sd(const char *name, JsonDocument doc) {
   Serial.println("Saving config to sd...");
-  String buf;
-  size_t len = serializeJsonPretty(doc, buf);
   auto f = SD.open(name, FILE_WRITE_BEGIN);
-  f.write(&buf[0], len);
+  size_t len = serializeJsonPretty(doc, f);
+  f.flush();
   f.close();
 }
 

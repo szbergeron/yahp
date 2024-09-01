@@ -272,7 +272,7 @@ template <uint32_t BUFSIZE> struct longsample_buf_t {
     }
 
     auto res = longsample_t{0, 0};
-    if (this->size == 0) {
+    if (this->size == 0 || n >= this->size) {
       // keep default
     } else {
       auto start = this->begin;
@@ -325,8 +325,6 @@ float linear_regression(vector_t<longsample_t, 10> &points) {
   float m_x = sum_x / n;
   float m_y = sum_y / n;
 
-  // Serial.println("Means: " + String(m_x) + ", " + String(m_y));
-
   float SS_xy = sum_xmy - (n * m_y * m_x);
   float SS_xx = sum_xmx - (n * m_x * m_x);
 
@@ -359,125 +357,9 @@ struct position_t {
     //float lra = linear_regression(before);
 }*/
 
-static interpolater_t<MAGNET_INTERPOLATOR_POINTS> drop_test2(uint8_t bnum, uint8_t pin, bool fastcal) {
-  set_board(bnum);
-  delayMicroseconds(10);
-  analogReadAveraging(16);
-  analogReadResolution(10);
-  pinMode(pin, INPUT_PULLDOWN);
-
-  const int32_t CROSSING_COUNT = 2;
-
-  float baseline = analogRead(pin);
-
-  Serial.println("This step calibrates the native hammer range,");
-  Serial.println("as well as the voltage response curve with respect to "
-                 "distance of the sensors");
-
-  // first collect the down position,
-  // to serve as a reference point for middle-crossing
-  float initial_resting = analogRead(pin);
-  float rough_max = initial_resting;
-
-  Serial.println("Now lift the hammer, until you can feel it pressing on the "
-                 "felt but without too much effort");
-  Serial.println("Don't try to deform the felt--when the hammer drops, it "
-                 "should not be accelerated by the felt");
-  Serial.println("You can release the hammer once you've done so, and then "
-                 "press the enter key");
-  Serial.clear();
-
-  bool above = false;
-  uint32_t middle_crossings = 0;
-
-  // how do we detect that the person has fully set the bounds?
-  // is there a better way than just waiting for newline
-  while (true) {
-    float v = analogRead(pin);
-
-    rough_max = max(rough_max, v);
-    initial_resting = min(initial_resting, v);
-
-    if (newline_waiting()) {
-      break;
-    }
-
-    bool crosses = false;
-    if (v > baseline + 30 && !above) {
-      above = true;
-      crosses = true;
-    } else if (v < baseline && above) {
-      above = false;
-      crosses = true;
-    }
-
-    if (crosses) {
-      int32_t remaining = CROSSING_COUNT - middle_crossings;
-      if (remaining <= 0) {
-        break;
-      }
-      middle_crossings++;
-      Serial.printf("Crossed midpoint, remaining crosses: %d\r\n", remaining);
-    }
-  }
-
-  Serial.printf("Found rough min %f and rough max %f\r\n", initial_resting,
-                rough_max);
-  if (!(fastcal || confirm("Is this acceptable?", true))) {
-    Serial.println("Retrying...");
-    return drop_test2(bnum, pin, fastcal);
-  }
-
-  Serial.println("Now, we need to generate a fall profile for the hammer.");
-  Serial.println("This will continuously sample sensor voltage, and will "
-                 "trigger a capture once");
-  Serial.println("the voltage falls to a 25% mark, which should be roughly "
-                 "at half-travel.");
-  Serial.println();
-  Serial.println("First, secure the back of the key itself. If the key is "
-                 "allowed to move with");
-  Serial.println("the hammer, it affects the fall speed such that it no "
-                 "longer sufficiently");
-  Serial.println("obeys free-body, free-fall properties. Make sure the jack "
-                 "and whippen");
-  Serial.println("do not follow the hammer up when you lift it, and do not "
-                 "make contact");
-  Serial.println("again until the hammer falls back to its resting position");
-  Serial.println();
-  Serial.println("Whenever you're ready, lift the hammer back to about the "
-                 "same point as before.");
-
-  const int BUF_SIZE = 4096;
-  vector_t<longsample_t, BUF_SIZE> buf;
-  longsample_buf_t<BUF_SIZE> ring;
-
-  while (true) {
-    float v = analogRead(pin);
-    if (v >= rough_max - 30) {
-      break;
-    }
-  }
-
-  Serial.println("Now, release the hammer and allow it to fall until it rests");
-  auto start = micros();
-
-  bool passed_midpoint = false;
-  float midpoint = ((rough_max - initial_resting) / 2) + initial_resting;
-
-  uint32_t midpoint_pos = 0;
-  float slope_at_mid = 0;
-
-  while(buf.size() < buf.max_size()) {
-      if(passed_midpoint == true) {
-          // check if we've settled at the bottom
-          //
-      } else {
-      }
-  }
-}
-
 static interpolater_t<MAGNET_INTERPOLATOR_POINTS>
 drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
+  Serial.printf("%c\r\n", 0x07);
   set_board(bnum);
   delayMicroseconds(10);
   analogReadAveraging(16);
@@ -566,11 +448,14 @@ drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
                  "same point as before.");
 
   // just make it nice and big
-  const int BUF_SIZE = 4096;
-  vector_t<longsample_t, BUF_SIZE> buf;
-
+  const int BUF_SIZE = 2200;
+  DMAMEM static vector_t<longsample_t, BUF_SIZE> buf;
   // first, start sampling into a ring
-  longsample_buf_t<2056> ring;
+  DMAMEM static longsample_buf_t<1200> ring;
+
+  // they're static to avoid memory weirdness, so clear them here
+  buf.clear();
+  ring.clear();
 
   // need to detect the first falling edge when dropping the hammer,
   // but don't want to accidentally trigger on noise,
@@ -590,33 +475,46 @@ drop_test(uint8_t bnum, uint8_t pin, bool fastcal) {
   float midpoint = ((rough_max - initial_resting) / 2) + initial_resting;
   // until buf full
   uint32_t midpoint_pos = 0;
-  while (buf.size() < buf.max_size()) {
-    delayMicroseconds(500);
+  while (!buf.full()) {
     float v = analogRead(pin);
     uint32_t t = micros() - start;
     longsample_t s(v, t);
     if (!passed_midpoint) {
       ring.add_sample(s);
 
+
       if (v < midpoint) {
-        passed_midpoint = true;
         Serial.println("Just passed midpoint");
+        Serial.printf("Going to copy over %d elems\r\n", ring.size - 1);
         // move them all over, do processing later
         for (int32_t i = ring.size - 1; i >= 0; i--) {
           if (buf.full()) {
             eloop("horrible state");
+          } else {
+            buf.push_back(ring.read_nth_oldest(i));
           }
-          buf.push_back(ring.read_nth_oldest(i));
         }
+        Serial.println("Copied everything over");
         midpoint_pos = buf.size();
+        passed_midpoint = true;
+        continue;
       }
     } else {
+        if(buf.size() > buf.max_size() - 10) {
+          Serial.printf("Near limit: %d\r\n", buf.size());
+        } else if(buf.size() < ring.size + 10) {
+            Serial.printf("Near lower limit: %d\r\n", buf.size());
+        }
       buf.push_back(s);
       if(s.value < initial_resting + 10) {
           break;
       }
     }
+    delayMicroseconds(600);
+    yield();
   }
+  Serial.printf("%c\r\n", 0x07);
+  Serial.printf("%c\r\n", 0x07);
 
   Serial.printf("Gathered %d datapoints\r\n", buf.size());
 

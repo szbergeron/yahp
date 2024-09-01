@@ -182,8 +182,8 @@ struct kbd_key_t {
         this->kstate = key_state_e::KEY_CRITICAL;
       } else if (hammer_position < this->global_key_config.active) {
         // drop to resting
-        Serial.printf("sensor %d goes to resting \r\n",
-                      this->sensor->sensor_id);
+        //Serial.printf("sensor %d goes to resting \r\n",
+                      //this->sensor->sensor_id);
         this->sensor->priority = sensor_t::poll_priority_e::RELAXED;
         this->kstate = key_state_e::KEY_RESTING;
       }

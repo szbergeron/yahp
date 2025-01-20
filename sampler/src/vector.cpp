@@ -33,7 +33,7 @@ public:
 
 private:
   T *values_ptr_;
-  size_t position_;
+  size_t position_ = 0;
 };
 
 template <typename T, size_t MAX_LEN> struct vector_t {
@@ -48,7 +48,7 @@ private:
   };
 
   elem elements[MAX_LEN];
-  size_t cur_len;
+  size_t cur_len = 0;
 
 public:
   typedef vector_iterator_t<T> iterator;
@@ -81,13 +81,49 @@ public:
     return this->elements[idx].some;
   }
 
+  result_t<T*, unit_t> find_by(std::function<bool(const T&)> filter) {
+      for(auto& v: *this) {
+          if(filter(v)) {
+              return result_t<T*, unit_t>::ok(&v);
+          }
+      }
+
+      return result_t<T*, unit_t>::err({});
+  }
+
+  T& find_by_or_insert(std::function<bool(const T&)> filter, const T& insert) {
+      auto r = this->find_by(filter);
+      if(r.is_ok()) {
+          return *r.unwrap();
+      } else {
+          this->push_back(insert);
+          return this->elements[this->size() - 1].some;
+      }
+  }
+
+  bool contains(const T &v) {
+      for(auto &elem : *this) {
+          if(elem == v) {
+              return true;
+          }
+      }
+
+      return false;
+  }
+
+  void clear() {
+      while(!this->empty()) {
+          this->pop_back();
+      }
+  }
+
   size_t size() { return this->cur_len; }
 
   size_t max_size() { return MAX_LEN; }
 
   bool empty() { return this->size() == 0; }
 
-  bool full() { return this->size() == MAX_LEN; }
+  bool full() { return this->size() >= this->max_size() - 1; }
 
   T &back() { return this->at(this->cur_len - 1); }
 
@@ -115,6 +151,18 @@ public:
     for (size_t i = 0; i < this->cur_len; i++) {
       (&this->elements[i].some)->T::~T();
     }
+  }
+
+  JsonDocument prim_to_json() {
+    JsonDocument di;
+
+    auto a = di.to<JsonArray>();
+
+    for (auto ent : *this) {
+      a.add(ent);
+    }
+
+    return di;
   }
 
   JsonDocument to_json() {
@@ -145,5 +193,11 @@ public:
     }
   }
 };
+
+/*template<size_t MAX_LEN>
+class vector_t<float, MAX_LEN> {
+    JsonDocument to_json() {
+    }
+};*/
 
 #endif

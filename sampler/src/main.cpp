@@ -135,6 +135,7 @@ void setup() {
     digitalToggle(LED_BUILTIN);
     Serial.println("Waiting...");
   }
+  Serial.printf("%c\r\n", 0x07);
 
   configure_adc();
 
@@ -154,6 +155,12 @@ void setup() {
     bool test_mode = confirm("try test mode?", false);
     if (test_mode) {
       testmode_entry();
+    }
+
+    bool do_more_calibration = confirm("recalibrate some keys?", false);
+    if(do_more_calibration) {
+      more_calibration(spec);
+      doReboot();
     }
   }
 

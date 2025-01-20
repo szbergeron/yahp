@@ -1,4 +1,5 @@
 // #include "ArduinoJson/Json/PrettyJsonSerializer.hpp"
+#include "ArduinoJson/Object/JsonObjectConst.hpp"
 #include "WProgram.h"
 #include "magnets.cpp"
 #include "unit.h"
@@ -90,6 +91,10 @@ struct tempkey_t {
   uint8_t pin;
 
   tempkey_t(uint8_t board, uint8_t pin) : board(board), pin(pin) {}
+
+  bool operator==(const tempkey_t& b) {
+      return this->board == b.board && this->pin == b.pin;
+  }
 };
 
 struct global_key_config_t {
@@ -198,6 +203,15 @@ struct pedal_spec_t {
   }
 };
 
+float float_from_text(char*) {
+
+}
+
+template<size_t VSIZE>
+void float_to_text(float val, vector_t<char, VSIZE>& vec) {
+    //
+}
+
 struct sensorspec_t {
   uint8_t pin_num = 0;
 
@@ -212,16 +226,49 @@ struct sensorspec_t {
 
   sensorspec_t(JsonObject j)
       : pin_num(j["pin_num"]), sensor_id(j["sensor_id"]),
-        curve(j["curve"].as<JsonArray>()) {}
+        curve(j["curve"].as<JsonArray>()) {
+            auto x = j["curve_x"].as<JsonArray>();
+            auto y = j["curve_y"].as<JsonArray>();
+
+            vector_t<point_t, MAGNET_INTERPOLATOR_POINTS> curve_points;
+
+            for(size_t i = 0; i < x.size() && i < y.size(); i++) {
+                point_t p(x[i], y[i]);
+                curve_points.push_back(p);
+            }
+
+            this->curve = curve_points;
+        }
 
   sensorspec_t(JsonVariant jv) : sensorspec_t(jv.as<JsonObject>()) {}
 
   JsonDocument to_json() {
     JsonDocument d;
 
+    vector_t<char, 8 * MAGNET_INTERPOLATOR_POINTS> curve;
+    size_t idx = 0;
+
+    for(auto val : this->curve) {
+        // hexify things
+        int32_t as_int = *(int32_t*)&val;
+
+        for(uint8_t shift = 0; shift < 32; shift += 4) {
+            auto v = (as_int >> shift) & 0xF + 'A';
+            //
+        }
+    }
+
     d["sensor_id"] = this->sensor_id;
     d["pin_num"] = this->pin_num;
-    d["curve"] = this->curve.to_json();
+    vector_t<float, MAGNET_INTERPOLATOR_POINTS> curve_x;
+    vector_t<float, MAGNET_INTERPOLATOR_POINTS> curve_y;
+    for(auto pt: this->curve) {
+        curve_x.push_back(pt.x);
+        curve_y.push_back(pt.y);
+    }
+    //d["curve"] = this->curve.to_json();
+    d["curve_x"] = curve_x.prim_to_json();
+    d["curve_y"] = curve_y.prim_to_json();
 
     return d;
   }
@@ -308,8 +355,8 @@ struct samplerspec_t {
     auto ja = j["boards"].as<JsonArray>();
 
     for (auto ent : ja) {
-      Serial.printf("Found board in json\r\n");
       boardspec_t b(ent.as<JsonObject>());
+      Serial.printf("Found board in json, ident: %d\r\n", int(b.board_num));
       this->boards.push_back(b);
     }
 

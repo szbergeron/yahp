@@ -43,7 +43,9 @@ template <uint32_t BUFSIZE = SAMPLE_BUFFER_LENGTH> struct sample_buf_t {
   uint32_t begin = 0;
   uint32_t size = 0;
 
-  uint32_t unackd;
+  uint32_t unackd = 0;
+
+  sample_buf_t() : begin(0), size(0), unackd(0) {}
 
   void add_sample(sample_t sample) {
     /*this->begin =
@@ -427,6 +429,13 @@ struct sampler_t {
         }
       }
     }
+    Serial.printf("Unable to find sensor by id %d?\r\n", sensor_id);
+    for (auto &board : this->boards) {
+      Serial.printf("Board by id %d:\r\n", (int)board.board_num);
+      for (auto &sensor : board.keys) {
+        Serial.printf("    Sensor by id %d\r\n", sensor.sensor_id);
+      }
+    }
 
     return nullptr;
   }
@@ -444,6 +453,7 @@ struct sampler_t {
 
   void sample_round() {
     set_board_pins();
+    delayMicroseconds(10);
     for (auto &board : this->boards) {
       board.do_round();
     }

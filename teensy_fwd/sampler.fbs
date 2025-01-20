@@ -1,0 +1,82 @@
+namespace YAHP;
+
+struct TsySample {
+    board: uint8;
+    pin: uint8;
+
+    value: uint16;
+
+    // difference, in microseconds,
+    // from sample_ts_low to the timestamp of this sample
+    ts_delta: uint32;
+}
+
+table ToPi {
+    tsy_timestamp: uint64;
+    tsy_pktid: uint64;
+
+
+    sample_ts_low: uint64;
+    samples: [TsySample] (required);
+
+    // list of commands that have been applied and ackd
+    acks: [uint64] (required);
+}
+
+enum Priority : byte {
+    Inactive, // this sensor never needs to be polled
+
+    Once, // poll this sensor _exactly once_, and then set it to the inactive state
+
+    Low, // for things like pedals
+    Medium, // for keys that are not yet active
+    Highest, // for keys that are active
+}
+
+struct Reprioritize {
+    sensor: uint16;
+    priority: Priority;
+}
+
+table SensorConfig {
+    sensor_id: uint16;
+
+    pin: uint8;
+}
+
+struct PriorityConfig {
+    // the lower and upper bounds (in microseconds) of the window
+    // within which a "low" priority sensor can be scheduled
+    // for read, as measured in time since the last
+    // read of that sensor.
+    low_min: uint32;
+    low_max: uint32;
+
+    medium_min: uint32;
+    medium_max: uint32;
+
+    highest_min: uint32;
+    highest_max: uint32;
+}
+
+table BoardConfig {
+    board_id: uint16;
+    board_selector: uint8;
+
+    priority: PriorityConfig (required);
+
+    sensors: [SensorConfig] (required);
+}
+
+table Configuration {
+    boards: [BoardConfig] (required);
+}
+
+table ToTsy {
+    pi_timestamp: uint64;
+    pi_pktid: uint64;
+
+    priority: [Reprioritize] (required);
+
+    configure: Configuration;
+}

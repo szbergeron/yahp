@@ -1,0 +1,23 @@
+@property --color-interact-primary {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: #d65d0e;
+    /*initial-value: rgba(255, 255, 255, 0.2);*/
+}
+
+@property --color-interact-hl {
+    syntax: "<color>";
+    inherits: false;
+}
+
+@property --color-interact-bg {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: #3c3836;
+}
+
+@property --color-bg-primary {
+    syntax: "<color>";
+    inherits: false;
+    initial-value: #1d2021;
+}
